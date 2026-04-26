@@ -73,6 +73,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     border: "line",
     mouse: true,
     tags: true,
+    wrap: false,
     style: { border: { fg: "cyan" } }
   });
 
@@ -654,6 +655,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     detailLoading = true;
     detailBox.hidden = false;
     (table as any).width = "38%";
+    render();         // rebuilds table content with compact layout
     renderDetailPane();
     screen.render();
 
@@ -963,10 +965,16 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
   // ─── Mouse bindings ──────────────────────────────────────────────────────────
 
-  table.on("click", (_data: { x: number; y: number }) => {
+  // Use screen-level click so focus on detailBox doesn't swallow table clicks.
+  // Coordinates are screen-absolute: header=4 rows, table border=1, content starts at y=5.
+  // Content line 0 = column headers, line 1 = "Showing N-M of X", line 2+ = PR rows.
+  screen.on("click", (data: { x: number; y: number }) => {
     if (activeOverlay || mode !== "pr") return;
-    // Row 0 = header, row 1 = position line, rows 2+ = data rows
-    const clickedRow = _data.y - 2 + tableScrollOffset;
+    const sw = typeof screen.width === "number" ? screen.width : 200;
+    const tableRightEdge = detailOpen ? Math.floor(sw * 0.38) : sw;
+    if (data.x >= tableRightEdge) return; // click is in detail pane or beyond
+    if (data.y < 7) return; // header box (0-3) + table border (4) + col header (5) + position (6)
+    const clickedRow = (data.y - 7) + tableScrollOffset;
     const pullRequests = getPullRequestsForView(getCurrentPrView());
     const pr = pullRequests[clickedRow];
     if (!pr) return;
