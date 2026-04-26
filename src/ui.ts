@@ -229,7 +229,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     if (count === 0) return;
     selectedRowIndex = Math.max(0, Math.min(selectedRowIndex + offset, count - 1));
     render();
-    if (detailOpen && mode === "pr") {
+    if (detailOpen && mode === "pr" && !detailLoading) {
       const pr = getSelectedPullRequest();
       if (pr) void openDetail(pr);
     }
@@ -638,8 +638,11 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
     const [owner, repo] = pr.repository.split("/");
     try {
-      detailData = await fetchPullRequestDetail(owner!, repo!, pr.number);
+      const result = await fetchPullRequestDetail(owner!, repo!, pr.number);
+      if (detailPr !== pr) return;
+      detailData = result;
     } catch {
+      if (detailPr !== pr) return;
       detailData = null;
     }
     detailLoading = false;
