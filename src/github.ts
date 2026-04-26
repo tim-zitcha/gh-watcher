@@ -785,11 +785,18 @@ const PULL_REQUEST_DETAIL_QUERY = `
         reviewRequests(first: 20) {
           nodes {
             requestedReviewer {
+              __typename
               ... on User {
                 login
               }
               ... on Team {
-                name
+                slug
+                organization {
+                  login
+                }
+              }
+              ... on Mannequin {
+                login
               }
             }
           }
@@ -847,7 +854,19 @@ interface PullRequestDetailResponse {
         };
         reviewRequests: {
           nodes: Array<{
-            requestedReviewer: { login?: string; name?: string } | null;
+            requestedReviewer:
+              | {
+                  __typename: "User" | "Mannequin";
+                  login: string;
+                }
+              | {
+                  __typename: "Team";
+                  slug: string;
+                  organization: {
+                    login: string;
+                  } | null;
+                }
+              | null;
           }>;
         };
         files: {
@@ -890,12 +909,8 @@ export async function fetchPullRequestDetail(
   }));
 
   const requestedReviewers: string[] = pr.reviewRequests.nodes
-    .map((request) => {
-      const reviewer = request.requestedReviewer;
-      if (!reviewer) return null;
-      return reviewer.login ?? reviewer.name ?? null;
-    })
-    .filter((login): login is string => Boolean(login));
+    .map((request) => normalizeRequestedReviewer(request.requestedReviewer))
+    .filter((reviewer): reviewer is string => Boolean(reviewer));
 
   const files: ChangedFile[] = pr.files.nodes.map((file) => ({
     path: file.path,
