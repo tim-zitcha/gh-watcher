@@ -943,6 +943,19 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     });
   }
 
+  // ─── Mouse bindings ──────────────────────────────────────────────────────────
+
+  table.on("click", (_data: { x: number; y: number }) => {
+    if (activeOverlay || mode !== "pr") return;
+    // Row 0 = header, row 1 = position line, rows 2+ = data rows
+    const clickedRow = _data.y - 2 + tableScrollOffset;
+    const pullRequests = getPullRequestsForView(getCurrentPrView());
+    const pr = pullRequests[clickedRow];
+    if (!pr) return;
+    selectedRowIndex = clickedRow;
+    void openDetail(pr);
+  });
+
   // ─── Key bindings ────────────────────────────────────────────────────────────
 
   screen.key("enter", () => {
