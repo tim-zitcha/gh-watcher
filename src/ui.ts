@@ -548,7 +548,10 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     }
 
     screen.render();
-    if (!activeOverlay) table.focus();
+    if (!activeOverlay) {
+      if (detailOpen) detailBox.focus();
+      else table.focus();
+    }
   }
 
   function renderDetailPane(): void {
@@ -948,10 +951,12 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     const pr = getSelectedPullRequest();
     if (pr) void openDetail(pr);
   });
-  screen.key(["down", "j"], () => moveSelection(1));
-  screen.key(["up", "k"], () => moveSelection(-1));
-  screen.key(["pagedown", "C-d"], () => moveSelection(10));
-  screen.key(["pageup", "C-u"], () => moveSelection(-10));
+  screen.key("down", () => { if (detailOpen) { detailBox.scroll(1); screen.render(); } else moveSelection(1); });
+  screen.key("up", () => { if (detailOpen) { detailBox.scroll(-1); screen.render(); } else moveSelection(-1); });
+  screen.key("j", () => moveSelection(1));
+  screen.key("k", () => moveSelection(-1));
+  screen.key(["pagedown", "C-d"], () => { if (detailOpen) { detailBox.scroll(10); screen.render(); } else moveSelection(10); });
+  screen.key(["pageup", "C-u"], () => { if (detailOpen) { detailBox.scroll(-10); screen.render(); } else moveSelection(-10); });
   screen.key(["home", "g"], () => jumpSelection("first"));
   screen.key(["end", "G"], () => jumpSelection("last"));
 
