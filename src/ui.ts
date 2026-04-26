@@ -103,7 +103,8 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     mouse: true,
     hidden: true,
     wrap: false,
-    style: { border: { fg: "yellow" } },
+    scrollbar: { ch: "│", track: { ch: " " }, style: { fg: "yellow" } },
+    style: { border: { fg: "yellow" }, scrollbar: { bg: "yellow" } },
     padding: { left: 1, right: 1 }
   });
 
