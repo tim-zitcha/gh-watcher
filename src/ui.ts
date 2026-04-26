@@ -96,15 +96,10 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     height: "100%-7",
     border: "line",
     tags: true,
-    scrollable: true,
-    alwaysScroll: true,
-    keys: true,
-    vi: true,
     mouse: true,
     hidden: true,
     wrap: false,
-    scrollbar: { ch: "│", track: { ch: " " }, style: { fg: "yellow" } },
-    style: { border: { fg: "yellow" }, scrollbar: { bg: "yellow" } },
+    style: { border: { fg: "yellow" } },
     padding: { left: 1, right: 1 }
   });
 
@@ -172,6 +167,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
   let detailPr: PullRequestSummary | null = null;
   let detailData: PullRequestDetail | null = null;
   let detailLoading = false;
+  let detailScrollOffset = 0;
 
   let mode: AppMode = "pr";
   let currentPrViewIndex = 0;
@@ -677,7 +673,24 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
       }
     }
 
-    detailBox.setContent(lines.join("\n"));
+    // Manually slice visible lines to avoid smartCSR scroll artifacts.
+    const sh = typeof screen.height === "number" ? screen.height : 24;
+    const visibleLines = sh - 7 - 2; // box height minus borders and padding
+    const totalLines = lines.length;
+    const maxOffset = Math.max(0, totalLines - visibleLines);
+    detailScrollOffset = Math.min(detailScrollOffset, maxOffset);
+    const visible = lines.slice(detailScrollOffset, detailScrollOffset + visibleLines);
+
+    // Pad to full height so old content is fully overwritten on every render.
+    while (visible.length < visibleLines) visible.push("");
+
+    detailBox.setContent(visible.join("\n"));
+  }
+
+  function scrollDetail(delta: number): void {
+    detailScrollOffset = Math.max(0, detailScrollOffset + delta);
+    renderDetailPane();
+    screen.render();
   }
 
   async function openDetail(pr: PullRequestSummary): Promise<void> {
@@ -685,6 +698,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     detailPr = pr;
     detailData = null;
     detailLoading = true;
+    detailScrollOffset = 0;
     detailBox.hidden = false;
     (table as any).width = "38%";
     render();         // rebuilds table content with compact layout
@@ -1023,12 +1037,12 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     const pr = getSelectedPullRequest();
     if (pr) void openDetail(pr);
   });
-  screen.key("down", () => { if (detailOpen) { detailBox.scroll(1); screen.render(); } else moveSelection(1); });
-  screen.key("up", () => { if (detailOpen) { detailBox.scroll(-1); screen.render(); } else moveSelection(-1); });
+  screen.key("down", () => { if (detailOpen) scrollDetail(1); else moveSelection(1); });
+  screen.key("up", () => { if (detailOpen) scrollDetail(-1); else moveSelection(-1); });
   screen.key("j", () => moveSelection(1));
   screen.key("k", () => moveSelection(-1));
-  screen.key(["pagedown", "C-d"], () => { if (detailOpen) { detailBox.scroll(10); screen.render(); } else moveSelection(10); });
-  screen.key(["pageup", "C-u"], () => { if (detailOpen) { detailBox.scroll(-10); screen.render(); } else moveSelection(-10); });
+  screen.key(["pagedown", "C-d"], () => { if (detailOpen) scrollDetail(10); else moveSelection(10); });
+  screen.key(["pageup", "C-u"], () => { if (detailOpen) scrollDetail(-10); else moveSelection(-10); });
   screen.key(["home", "g"], () => jumpSelection("first"));
   screen.key(["end", "G"], () => jumpSelection("last"));
 
