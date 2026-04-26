@@ -101,6 +101,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     vi: true,
     mouse: true,
     hidden: true,
+    wrap: false,
     style: { border: { fg: "yellow" } },
     padding: { left: 1, right: 1 }
   });
@@ -340,23 +341,49 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
   // ─── PR table ────────────────────────────────────────────────────────────────
 
   function buildPrTableContent(pullRequests: PullRequestSummary[]): string {
-    const screenWidth = typeof screen.width === "number"
-      ? (detailOpen ? Math.floor(screen.width * 0.38) : screen.width)
-      : 200;
-    const fixedCols = { state: 5, repo: 26, pr: 6, author: 14, ci: 10, reviewers: 22, activity: 14 };
-    const fixedTotal = Object.values(fixedCols).reduce((a, b) => a + b, 0) + 7; // 7 spaces
-    const titleWidth = Math.max(20, screenWidth - fixedTotal - 4); // 4 = border+padding
-    const columns = [
-      { label: "State", width: fixedCols.state },
-      { label: "Repo", width: fixedCols.repo },
-      { label: "PR", width: fixedCols.pr },
-      { label: "Author", width: fixedCols.author },
-      { label: "CI", width: fixedCols.ci },
-      { label: "Reviewers", width: fixedCols.reviewers },
-      { label: "Activity", width: fixedCols.activity },
-      { label: "Title", width: titleWidth }
-    ];
-    const headerRow = columns.map((c) => padCell(c.label, c.width)).join(" ");
+    const screenWidth = typeof screen.width === "number" ? screen.width : 200;
+    const screenHeight = typeof screen.height === "number" ? screen.height : 24;
+
+    // Compact layout when detail pane is open (38% width ≈ narrow)
+    let headerRow: string;
+    let buildRow: (row: PullRequestRow) => string;
+
+    if (detailOpen) {
+      const availWidth = Math.floor(screenWidth * 0.38) - 4; // border+padding
+      const prCol = 6;
+      const ciCol = 4;
+      const titleWidth = Math.max(8, availWidth - prCol - ciCol - 2);
+      headerRow = [padCell("PR", prCol), padTaggedCell("CI", ciCol), padCell("Title", titleWidth)].join(" ");
+      buildRow = (row) => [
+        padCell(row.pr, prCol),
+        padTaggedCell(row.ci, ciCol),
+        padCell(row.title, titleWidth)
+      ].join(" ");
+    } else {
+      const fixedCols = { state: 5, repo: 26, pr: 6, author: 14, ci: 10, reviewers: 22, activity: 14 };
+      const fixedTotal = Object.values(fixedCols).reduce((a, b) => a + b, 0) + 7;
+      const titleWidth = Math.max(20, screenWidth - fixedTotal - 4);
+      headerRow = [
+        padCell("State", fixedCols.state),
+        padCell("Repo", fixedCols.repo),
+        padCell("PR", fixedCols.pr),
+        padCell("Author", fixedCols.author),
+        padCell("CI", fixedCols.ci),
+        padCell("Reviewers", fixedCols.reviewers),
+        padCell("Activity", fixedCols.activity),
+        padCell("Title", titleWidth)
+      ].join(" ");
+      buildRow = (row) => [
+        padCell(row.badge, fixedCols.state),
+        padCell(row.repository, fixedCols.repo),
+        padCell(row.pr, fixedCols.pr),
+        padCell(row.author, fixedCols.author),
+        padTaggedCell(row.ci, fixedCols.ci),
+        padCell(row.reviewers, fixedCols.reviewers),
+        padCell(row.activity, fixedCols.activity),
+        padCell(row.title, titleWidth)
+      ].join(" ");
+    }
 
     if (loadingMessage) return [headerRow, "", `  LOAD  ${loadingMessage}`].join("\n");
     if (pullRequests.length === 0) {
@@ -376,7 +403,6 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
       title: pr.title
     }));
 
-    const screenHeight = typeof screen.height === "number" ? screen.height : 24;
     const visibleRows = Math.max(1, screenHeight - 9);
     if (selectedRowIndex < tableScrollOffset) tableScrollOffset = selectedRowIndex;
     if (selectedRowIndex >= tableScrollOffset + visibleRows) tableScrollOffset = selectedRowIndex - visibleRows + 1;
@@ -384,16 +410,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
     const visible = rows.slice(tableScrollOffset, tableScrollOffset + visibleRows);
     const body = visible.map((row, i) => {
-      const content = [
-        padCell(row.badge, fixedCols.state),
-        padCell(row.repository, fixedCols.repo),
-        padCell(row.pr, fixedCols.pr),
-        padCell(row.author, fixedCols.author),
-        padTaggedCell(row.ci, fixedCols.ci),
-        padCell(row.reviewers, fixedCols.reviewers),
-        padCell(row.activity, fixedCols.activity),
-        padCell(row.title, titleWidth)
-      ].join(" ");
+      const content = buildRow(row);
       return tableScrollOffset + i === selectedRowIndex ? `{inverse}${content}{/inverse}` : content;
     });
 
@@ -580,7 +597,8 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
       // Description
       lines.push("── Description ──────────────────");
-      lines.push(d.body.trim() || "(no description)");
+      const safeBody = d.body.trim().replace(/\r/g, "").replace(/[{}]/g, (c) => c === "{" ? "\\{" : "\\}");
+      lines.push(safeBody || "(no description)");
       lines.push("");
 
       // CI Checks
