@@ -1,0 +1,102 @@
+{
+  "data": {
+    "search": {
+      "nodes": [
+        {
+          "id": "PR_kwDOA1",
+          "number": 42,
+          "title": "Update dependency graph",
+          "url": "https://github.com/acme/widgets/pull/42",
+          "isDraft": false,
+          "updatedAt": "2026-04-24T01:00:00Z",
+          "reviewDecision": "REVIEW_REQUIRED",
+          "repository": {
+            "nameWithOwner": "acme/widgets"
+          },
+          "author": {
+            "login": "dependabot[bot]"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "alice"
+                }
+              }
+            ]
+          },
+          "comments": {
+            "nodes": [
+              {
+                "createdAt": "2026-04-24T00:10:00Z",
+                "updatedAt": "2026-04-24T00:10:00Z"
+              }
+            ]
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "submittedAt": "2026-04-24T00:30:00Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "abc123",
+                  "committedDate": "2026-04-24T00:50:00Z"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_kwDOA2",
+          "number": 99,
+          "title": "Tighten cache invalidation",
+          "url": "https://github.com/acme/api/pull/99",
+          "isDraft": true,
+          "updatedAt": "2026-04-23T08:00:00Z",
+          "reviewDecision": "APPROVED",
+          "repository": {
+            "nameWithOwner": "acme/api"
+          },
+          "author": {
+            "login": "alice"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "slug": "platform",
+                  "organization": {
+                    "login": "acme"
+                  }
+                }
+              }
+            ]
+          },
+          "comments": {
+            "nodes": []
+          },
+          "reviews": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "def456",
+                  "committedDate": "2026-04-23T07:30:00Z"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "gh-watcher",
+  "version": "0.1.0",
+  "description": "Terminal dashboard for GitHub pull requests and Dependabot security alerts.",
+  "type": "module",
+  "bin": {
+    "gh-watcher": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "dev:watch": "tsx watch src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "node-notifier": "^10.0.1",
+    "open": "^10.1.2"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.25",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.7"
+  }
+}
