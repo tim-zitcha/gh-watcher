@@ -968,7 +968,8 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
   // Use screen-level click so focus on detailBox doesn't swallow table clicks.
   // Coordinates are screen-absolute: header=4 rows, table border=1, content starts at y=5.
   // Content line 0 = column headers, line 1 = "Showing N-M of X", line 2+ = PR rows.
-  screen.on("click", (data: { x: number; y: number }) => {
+  screen.on("mouse", (data: { x: number; y: number; action: string }) => {
+    if (data.action !== "mouseup") return;
     if (activeOverlay || mode !== "pr") return;
     const sw = typeof screen.width === "number" ? screen.width : 200;
     const tableRightEdge = detailOpen ? Math.floor(sw * 0.38) : sw;
