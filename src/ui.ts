@@ -2,13 +2,14 @@ import blessed from "blessed";
 import open from "open";
 
 import { buildNotifications } from "./domain.js";
-import { extractOrgFromScope, fetchAllViews, fetchDependabotAlerts, fetchMyPrsData, fetchNeedsMyReviewData, fetchOrganizationMembers, fetchPullRequestsAuthoredBy } from "./github.js";
+import { extractOrgFromScope, fetchAllViews, fetchDependabotAlerts, fetchMyPrsData, fetchNeedsMyReviewData, fetchOrganizationMembers, fetchPullRequestDetail, fetchPullRequestsAuthoredBy } from "./github.js";
 import { sendNotifications } from "./notify.js";
 import { isUnread, markSeen, saveState, updateWatchedAuthors } from "./state.js";
 import type {
   AlertSeverity,
   AppConfig,
   PersistedState,
+  PullRequestDetail,
   PullRequestRow,
   PullRequestSummary,
   RepositoryScopeOption,
@@ -86,6 +87,24 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     style: { border: { fg: "cyan" } }
   });
 
+  const detailBox = blessed.box({
+    parent: screen,
+    top: 4,
+    right: 0,
+    width: "62%",
+    height: "100%-7",
+    border: "line",
+    tags: true,
+    scrollable: true,
+    alwaysScroll: true,
+    keys: true,
+    vi: true,
+    mouse: true,
+    hidden: true,
+    style: { border: { fg: "yellow" } },
+    padding: { left: 1, right: 1 }
+  });
+
   const userPicker = blessed.list({
     parent: screen,
     border: "line",
@@ -146,6 +165,11 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
   type ViewKey = "myPrs" | "needsMyReview" | "watchedAuthor" | "security";
 
+  let detailOpen = false;
+  let detailPr: PullRequestSummary | null = null;
+  let detailData: PullRequestDetail | null = null;
+  let detailLoading = false;
+
   let mode: AppMode = "pr";
   let currentPrViewIndex = 0;
   let persistedState = options.initialState;
@@ -205,6 +229,10 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     if (count === 0) return;
     selectedRowIndex = Math.max(0, Math.min(selectedRowIndex + offset, count - 1));
     render();
+    if (detailOpen && mode === "pr") {
+      const pr = getSelectedPullRequest();
+      if (pr) void openDetail(pr);
+    }
   }
 
   function jumpSelection(position: "first" | "last"): void {
@@ -312,7 +340,9 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
   // ─── PR table ────────────────────────────────────────────────────────────────
 
   function buildPrTableContent(pullRequests: PullRequestSummary[]): string {
-    const screenWidth = typeof screen.width === "number" ? screen.width : 200;
+    const screenWidth = typeof screen.width === "number"
+      ? (detailOpen ? Math.floor(screen.width * 0.38) : screen.width)
+      : 200;
     const fixedCols = { state: 5, repo: 26, pr: 6, author: 14, ci: 10, reviewers: 22, activity: 14 };
     const fixedTotal = Object.values(fixedCols).reduce((a, b) => a + b, 0) + 7; // 7 spaces
     const titleWidth = Math.max(20, screenWidth - fixedTotal - 4); // 4 = border+padding
@@ -511,11 +541,120 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
       else selectedRowIndex = Math.min(selectedRowIndex, count - 1);
 
       table.setContent(buildPrTableContent(pullRequests));
-      footer.setContent("j/k move  Enter open  m mark seen  M mark all  Tab views  / author  o org  r refresh  S security  q quit");
+      footer.setContent(detailOpen
+        ? "j/k move  o open in GitHub  Esc close detail  q quit"
+        : "j/k move  Enter open detail  m mark seen  M mark all  Tab views  / author  o org  r refresh  S security  q quit"
+      );
     }
 
     screen.render();
     if (!activeOverlay) table.focus();
+  }
+
+  function renderDetailPane(): void {
+    if (!detailPr) return;
+
+    const pr = detailPr;
+    const createdAtStr = detailData?.createdAt ?? pr.activity.latestActivityAt;
+    const openedDate = new Date(createdAtStr);
+    const openedLabel = Number.isNaN(openedDate.valueOf()) ? createdAtStr : new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(openedDate);
+
+    const lines: string[] = [
+      `{bold}#${pr.number} — ${pr.title}{/bold}`,
+      `${pr.repository} · ${pr.author} · opened ${openedLabel}`,
+      ""
+    ];
+
+    if (detailLoading) {
+      lines.push("{yellow-fg}Loading...{/yellow-fg}");
+    } else if (detailData) {
+      const d = detailData;
+
+      // Description
+      lines.push("── Description ──────────────────");
+      lines.push(d.body.trim() || "(no description)");
+      lines.push("");
+
+      // CI Checks
+      const passing = d.checkRuns.filter((c) => c.conclusion === "SUCCESS").length;
+      const failing = d.checkRuns.filter((c) => c.conclusion !== null && c.conclusion !== "SUCCESS" && c.conclusion !== "NEUTRAL" && c.conclusion !== "SKIPPED").length;
+      lines.push(`── CI Checks (${passing} passing / ${failing} failing) ──`);
+      for (const check of d.checkRuns) {
+        if (check.conclusion === "SUCCESS") {
+          lines.push(`{green-fg}✓{/green-fg} ${check.name}`);
+        } else if (check.conclusion === null) {
+          lines.push(`{yellow-fg}●{/yellow-fg} ${check.name}`);
+        } else {
+          lines.push(`{red-fg}✗{/red-fg} ${check.name}`);
+        }
+      }
+      lines.push("");
+
+      // Reviews
+      lines.push("── Reviews ──────────────────────");
+      const reviewedAuthors = new Set(d.reviews.map((r) => r.author));
+      for (const review of d.reviews) {
+        if (review.state === "APPROVED") {
+          lines.push(`{green-fg}✓{/green-fg} ${review.author} — APPROVED`);
+        } else if (review.state === "CHANGES_REQUESTED") {
+          lines.push(`{red-fg}✗{/red-fg} ${review.author} — CHANGES_REQUESTED`);
+        } else {
+          lines.push(`${review.author} — ${review.state}`);
+        }
+      }
+      for (const reviewer of d.requestedReviewers) {
+        if (!reviewedAuthors.has(reviewer)) {
+          lines.push(`{yellow-fg}⏳{/yellow-fg} ${reviewer} — PENDING`);
+        }
+      }
+      lines.push("");
+
+      // Files Changed
+      const totalAdditions = d.files.reduce((sum, f) => sum + f.additions, 0);
+      const totalDeletions = d.files.reduce((sum, f) => sum + f.deletions, 0);
+      lines.push(`── Files Changed (${d.files.length} files, +${totalAdditions} −${totalDeletions}) ──`);
+      for (const file of d.files) {
+        lines.push(`${file.path}   {green-fg}+${file.additions}{/green-fg} {red-fg}−${file.deletions}{/red-fg}`);
+      }
+    }
+
+    detailBox.setContent(lines.join("\n"));
+  }
+
+  async function openDetail(pr: PullRequestSummary): Promise<void> {
+    detailOpen = true;
+    detailPr = pr;
+    detailData = null;
+    detailLoading = true;
+    detailBox.hidden = false;
+    (table as any).width = "38%";
+    renderDetailPane();
+    screen.render();
+
+    const [owner, repo] = pr.repository.split("/");
+    try {
+      detailData = await fetchPullRequestDetail(owner!, repo!, pr.number);
+    } catch {
+      detailData = null;
+    }
+    detailLoading = false;
+    renderDetailPane();
+    screen.render();
+  }
+
+  function closeDetail(): void {
+    detailOpen = false;
+    detailPr = null;
+    detailData = null;
+    detailLoading = false;
+    detailBox.hidden = true;
+    (table as any).width = "100%";
+    render();
   }
 
   // ─── State helpers ───────────────────────────────────────────────────────────
@@ -800,7 +939,12 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
   // ─── Key bindings ────────────────────────────────────────────────────────────
 
-  screen.key("enter", () => { void openSelected(); });
+  screen.key("enter", () => {
+    if (activeOverlay) return;
+    if (mode === "security") { void openSelected(); return; }
+    const pr = getSelectedPullRequest();
+    if (pr) void openDetail(pr);
+  });
   screen.key(["down", "j"], () => moveSelection(1));
   screen.key(["up", "k"], () => moveSelection(-1));
   screen.key(["pagedown", "C-d"], () => moveSelection(10));
@@ -831,7 +975,19 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
   });
 
   screen.key("/", () => { void openWatchedAuthorPicker(); });
-  screen.key("o", () => { openScopePicker(); });
+  screen.key("o", () => {
+    if (activeOverlay) return;
+    if (mode === "pr" && detailOpen) {
+      const pr = detailPr ?? getSelectedPullRequest();
+      if (pr) void open(pr.url);
+      return;
+    }
+    openScopePicker();
+  });
+
+  screen.key("escape", () => {
+    if (detailOpen) { closeDetail(); return; }
+  });
   screen.key("r", () => { refresh(currentViewKey()); });
 
   screen.key(["m", "M", "S-m"], (_ch, key) => {
