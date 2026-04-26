@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-import type { ActivitySnapshot, AlertSeverity, CheckCounts, CiStatus, PullRequestSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
+import type { ActivitySnapshot, AlertSeverity, ChangedFile, CheckRun, CheckCounts, CiStatus, PullRequestDetail, PullRequestSummary, ReviewSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
 import { isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
 
 const SEARCH_PAGE_SIZE = 30;
@@ -735,6 +735,206 @@ export async function fetchDependabotAlerts(org: string): Promise<{ alerts: Secu
   ]);
 
   return { alerts, total };
+}
+
+const PULL_REQUEST_DETAIL_QUERY = `
+  query PullRequestDetail($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        number
+        title
+        url
+        body
+        isDraft
+        createdAt
+        additions
+        deletions
+        changedFiles
+        author {
+          login
+        }
+        repository {
+          nameWithOwner
+        }
+        commits(last: 1) {
+          nodes {
+            commit {
+              checkSuites(first: 10) {
+                nodes {
+                  checkRuns(first: 50) {
+                    nodes {
+                      name
+                      conclusion
+                      status
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        reviews(last: 20, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
+          nodes {
+            author {
+              login
+            }
+            state
+            submittedAt
+          }
+        }
+        reviewRequests(first: 20) {
+          nodes {
+            requestedReviewer {
+              __typename
+              ... on User {
+                login
+              }
+              ... on Team {
+                slug
+                organization {
+                  login
+                }
+              }
+              ... on Mannequin {
+                login
+              }
+            }
+          }
+        }
+        files(first: 50) {
+          nodes {
+            path
+            additions
+            deletions
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface PullRequestDetailResponse {
+  data: {
+    repository: {
+      pullRequest: {
+        number: number;
+        title: string;
+        url: string;
+        body: string | null;
+        isDraft: boolean;
+        createdAt: string;
+        additions: number;
+        deletions: number;
+        changedFiles: number;
+        author: { login: string } | null;
+        repository: { nameWithOwner: string };
+        commits: {
+          nodes: Array<{
+            commit: {
+              checkSuites: {
+                nodes: Array<{
+                  checkRuns: {
+                    nodes: Array<{
+                      name: string;
+                      conclusion: string | null;
+                      status: string;
+                    }>;
+                  };
+                } | null>;
+              };
+            };
+          }>;
+        };
+        reviews: {
+          nodes: Array<{
+            author: { login: string } | null;
+            state: string;
+            submittedAt: string | null;
+          }>;
+        };
+        reviewRequests: {
+          nodes: Array<{
+            requestedReviewer:
+              | {
+                  __typename: "User" | "Mannequin";
+                  login: string;
+                }
+              | {
+                  __typename: "Team";
+                  slug: string;
+                  organization: {
+                    login: string;
+                  } | null;
+                }
+              | null;
+          }>;
+        };
+        files: {
+          nodes: Array<{
+            path: string;
+            additions: number;
+            deletions: number;
+          }>;
+        };
+      } | null;
+    } | null;
+  };
+}
+
+export async function fetchPullRequestDetail(
+  owner: string,
+  repo: string,
+  number: number
+): Promise<PullRequestDetail> {
+  const payload = await runGhApi(PULL_REQUEST_DETAIL_QUERY, { owner, repo, number });
+  const parsed = JSON.parse(payload) as PullRequestDetailResponse;
+  const pr = parsed.data.repository?.pullRequest;
+
+  if (!pr) {
+    throw new Error(`Pull request ${owner}/${repo}#${number} not found`);
+  }
+
+  const checkRuns: CheckRun[] = (pr.commits.nodes.at(0)?.commit.checkSuites.nodes ?? [])
+    .flatMap((suite) => suite?.checkRuns.nodes ?? [])
+    .map((run) => ({
+      name: run.name,
+      conclusion: run.conclusion,
+      status: run.status
+    }));
+
+  const reviews: ReviewSummary[] = pr.reviews.nodes.map((review) => ({
+    author: review.author?.login ?? "ghost",
+    state: review.state,
+    submittedAt: review.submittedAt
+  }));
+
+  const requestedReviewers: string[] = pr.reviewRequests.nodes
+    .map((request) => normalizeRequestedReviewer(request.requestedReviewer))
+    .filter((reviewer): reviewer is string => Boolean(reviewer));
+
+  const files: ChangedFile[] = pr.files.nodes.map((file) => ({
+    path: file.path,
+    additions: file.additions,
+    deletions: file.deletions
+  }));
+
+  return {
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    body: pr.body ?? "",
+    isDraft: pr.isDraft,
+    author: pr.author?.login ?? "ghost",
+    repository: pr.repository.nameWithOwner,
+    createdAt: pr.createdAt,
+    additions: pr.additions,
+    deletions: pr.deletions,
+    changedFiles: pr.changedFiles,
+    checkRuns,
+    reviews,
+    requestedReviewers,
+    files
+  };
 }
 
 export function extractOrgFromScope(repositoryScope: string | null): string | null {

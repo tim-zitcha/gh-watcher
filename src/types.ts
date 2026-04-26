@@ -104,3 +104,39 @@ export interface SecurityAlert {
   createdAt: string;
   url: string;
 }
+
+export interface CheckRun {
+  name: string;
+  conclusion: string | null; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, TIMED_OUT, ACTION_REQUIRED, null (in progress)
+  status: string; // QUEUED, IN_PROGRESS, COMPLETED
+}
+
+export interface ReviewSummary {
+  author: string;
+  state: string; // APPROVED, CHANGES_REQUESTED, COMMENTED, PENDING, DISMISSED
+  submittedAt: string | null;
+}
+
+export interface ChangedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface PullRequestDetail {
+  number: number;
+  title: string;
+  url: string;
+  body: string;
+  isDraft: boolean;
+  author: string;
+  repository: string;
+  createdAt: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  checkRuns: CheckRun[];
+  reviews: ReviewSummary[];
+  requestedReviewers: string[];
+  files: ChangedFile[];
+}
