@@ -684,7 +684,23 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
     // Pad to full height so old content is fully overwritten on every render.
     while (visible.length < visibleLines) visible.push("");
 
-    detailBox.setContent(visible.join("\n"));
+    // Draw scrollbar on the right edge when content exceeds viewport.
+    const sw = typeof screen.width === "number" ? screen.width : 200;
+    const innerWidth = Math.floor(sw * 0.62) - 4; // border(2) + padding(2)
+    const needsScrollbar = totalLines > visibleLines;
+    const thumbSize = needsScrollbar ? Math.max(1, Math.round(visibleLines * visibleLines / totalLines)) : 0;
+    const thumbStart = needsScrollbar ? Math.round((detailScrollOffset / Math.max(1, maxOffset)) * (visibleLines - thumbSize)) : 0;
+
+    const withScrollbar = visible.map((line, i) => {
+      const plainLen = stripBlessedTags(line).length;
+      const pad = Math.max(0, innerWidth - plainLen - 1);
+      const bar = !needsScrollbar ? "" : (i >= thumbStart && i < thumbStart + thumbSize)
+        ? "{yellow-fg}│{/yellow-fg}"
+        : "{gray-fg}·{/gray-fg}";
+      return `${line}${" ".repeat(pad)}${bar}`;
+    });
+
+    detailBox.setContent(withScrollbar.join("\n"));
   }
 
   function scrollDetail(delta: number): void {
