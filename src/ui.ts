@@ -275,6 +275,36 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
   // ─── Formatting helpers ──────────────────────────────────────────────────────
 
+  function htmlToText(html: string): string {
+    return html
+      .replace(/\r/g, "")
+      .replace(/<details[^>]*>/gi, "")
+      .replace(/<\/details>/gi, "")
+      .replace(/<summary[^>]*>(.*?)<\/summary>/gis, "[$1]")
+      .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gis, "\n## $1\n")
+      .replace(/<li[^>]*>/gi, "\n  - ")
+      .replace(/<\/li>/gi, "")
+      .replace(/<ul[^>]*>|<\/ul>|<ol[^>]*>|<\/ol>/gi, "")
+      .replace(/<p[^>]*>/gi, "\n")
+      .replace(/<\/p>/gi, "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<strong[^>]*>(.*?)<\/strong>/gis, "*$1*")
+      .replace(/<em[^>]*>(.*?)<\/em>/gis, "_$1_")
+      .replace(/<code[^>]*>(.*?)<\/code>/gis, "`$1`")
+      .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gis, "$2 ($1)")
+      .replace(/<blockquote[^>]*>/gi, "\n> ")
+      .replace(/<\/blockquote>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"")
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   function formatTimestamp(value: string): string {
     const date = new Date(value);
     if (Number.isNaN(date.valueOf())) return value;
@@ -598,7 +628,8 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
       // Description
       lines.push("── Description ──────────────────");
-      const safeBody = d.body.trim().replace(/\r/g, "").replace(/[{}]/g, (c) => c === "{" ? "\\{" : "\\}");
+      const bodyText = htmlToText(d.body);
+      const safeBody = bodyText.replace(/[{}]/g, (c) => c === "{" ? "\\{" : "\\}");
       lines.push(safeBody || "(no description)");
       lines.push("");
 
