@@ -44,13 +44,18 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
 
   const focusColor = !state.detailOpen || state.focusedPanel === "list" ? "cyan" : "gray";
 
+  // Column widths for data cells. Header labels must be padded to the same width.
+  // Each data cell is followed by one explicit space, so the header must match that too.
+  const ciW = 2;   // CI symbol padded to 2 chars  ("✓ ", "✗2", "~ ")
+  const revW = 3;  // Rev symbol padded to 3 chars  ("◑  ", "✓  ", "✗  ")
+
   if (narrow) {
     const panelWidth = Math.floor(cols * 0.38);
-    const titleWidth = Math.max(8, panelWidth - 2 - 3 - 3 - 4);
+    const titleWidth = Math.max(8, panelWidth - 2 - (1 + ciW + 1 + revW + 1 + 1));
     return (
       <Box flexDirection="column" borderStyle="single" borderColor={focusColor} width="38%">
-        <Text dimColor>{pad("·", 2)} {pad("CI", 2)} {pad("R", 2)} {pad("Title", titleWidth)}</Text>
-        <Text dimColor>{showingLabel}</Text>
+        {/* Header: "· " + "CI" + " " + "Rev" + " " + "Title..." — matches data row exactly */}
+        <Text dimColor>{"· "}{pad("CI", ciW)}{" "}{pad("Rev", revW)}{" "}{pad("Title", titleWidth)}</Text>
         {visible.map((pr, i) => {
           const selected = scrollOffset + i === selectedRowIndex;
           const unread = isUnread(state.persistedState, pr);
@@ -60,34 +65,31 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
             <Text key={pr.id} inverse={selected} dimColor={!unread && !selected}>
               <Text color={unread ? "yellow" : "gray"}>{unread ? "●" : "·"}</Text>
               {" "}
-              <Text color={ci.color}>{pad(ci.symbol, 2)}</Text>
+              <Text color={ci.color}>{pad(ci.symbol, ciW)}</Text>
               {" "}
-              <Text color={rev.color}>{pad(rev.symbol, 2)}</Text>
+              <Text color={rev.color}>{pad(rev.symbol, revW)}</Text>
               {" "}
               {pad(pr.title, titleWidth)}
             </Text>
           );
         })}
         {isLoadingMore && <Text color="yellow" dimColor>  ● Loading more…</Text>}
+        <Text dimColor>{showingLabel}</Text>
       </Box>
     );
   }
 
-  const unreadCol = 2;
-  const ciCol = 3;
-  const revCol = 3;
   const repoCol = 24;
   const authorCol = 14;
   const ageCol = 6;
-  const fixedTotal = unreadCol + ciCol + revCol + repoCol + authorCol + ageCol + 7;
+  // Total fixed chars per row: 1 (dot) + 1 (sp) + ciW + 1 (sp) + revW + 1 (sp) + repoCol + 1 (sp) + authorCol + 1 (sp) + ageCol + 1 (sp)
+  const fixedTotal = 1 + 1 + ciW + 1 + revW + 1 + repoCol + 1 + authorCol + 1 + ageCol + 1;
   const titleWidth = Math.max(20, cols - 4 - fixedTotal);
 
   return (
     <Box flexDirection="column" borderStyle="single" borderColor={focusColor} flexGrow={1}>
-      <Text dimColor>
-        {pad("·", unreadCol)} {pad("CI", ciCol)} {pad("Rev", revCol)} {pad("Title", titleWidth)} {pad("Repo", repoCol)} {pad("Author", authorCol)} {pad("Age", ageCol)}
-      </Text>
-      <Text dimColor>{showingLabel}</Text>
+      {/* Header: each label padded to the same width as its data cell, plus matching space */}
+      <Text dimColor>{"· "}{pad("CI", ciW)}{" "}{pad("Rev", revW)}{" "}{pad("Title", titleWidth)}{" "}{pad("Repo", repoCol)}{" "}{pad("Author", authorCol)}{" "}{pad("Age", ageCol)}</Text>
       {visible.map((pr, i) => {
         const selected = scrollOffset + i === selectedRowIndex;
         const unread = isUnread(state.persistedState, pr);
@@ -98,9 +100,9 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
           <Text key={pr.id} inverse={selected} dimColor={!unread && !selected}>
             <Text color={unread ? "yellow" : "gray"}>{unread ? "●" : "·"}</Text>
             {" "}
-            <Text color={ci.color}>{pad(ci.symbol, ciCol - 1)}</Text>
+            <Text color={ci.color}>{pad(ci.symbol, ciW)}</Text>
             {" "}
-            <Text color={rev.color}>{pad(rev.symbol, revCol - 1)}</Text>
+            <Text color={rev.color}>{pad(rev.symbol, revW)}</Text>
             {" "}
             {pad(pr.title, titleWidth)}
             {" "}
@@ -113,6 +115,7 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
         );
       })}
       {isLoadingMore && <Text color="yellow" dimColor>  ● Loading more…</Text>}
+      <Text dimColor>{showingLabel}</Text>
     </Box>
   );
 }
