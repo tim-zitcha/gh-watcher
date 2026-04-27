@@ -326,10 +326,18 @@ function Dashboard({ options }: { options: DashboardOptions }) {
   }
 
   function moveSelection(offset: number): void {
+    const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
+    if (state.mode === "security") {
+      const alerts = sortSecurityAlerts(state.attentionState.securityAlerts, state.securitySortMode);
+      if (alerts.length === 0) return;
+      const newIdx = Math.max(0, Math.min(state.selectedRowIndex + offset, alerts.length - 1));
+      const newScroll = clampScroll(newIdx, state.tableScrollOffset, visibleRows);
+      dispatch({ type: "SET_SELECTED_ROW", index: newIdx, scrollOffset: newScroll });
+      return;
+    }
     const prs = getPrsForCurrentView();
     if (prs.length === 0) return;
     const newIdx = Math.max(0, Math.min(state.selectedRowIndex + offset, prs.length - 1));
-    const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
     const newScroll = clampScroll(newIdx, state.tableScrollOffset, visibleRows);
     dispatch({ type: "SET_SELECTED_ROW", index: newIdx, scrollOffset: newScroll });
     if (state.detailOpen && !state.detailLoading) {
