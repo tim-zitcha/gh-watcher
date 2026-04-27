@@ -55,6 +55,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     detailDiffVisible: false,
     detailDiffFileIndex: 0,
     focusedPanel: "list" as AppState["focusedPanel"],
+    messagesShowAll: false,
   }));
 
   const isRefreshingRef = useRef(false);

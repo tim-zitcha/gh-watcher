@@ -52,6 +52,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, detailDiffFileIndex: action.index };
     case "SET_FOCUSED_PANEL":
       return { ...state, focusedPanel: action.panel };
+    case "SET_MESSAGES_SHOW_ALL":
+      return { ...state, messagesShowAll: action.value, selectedRowIndex: 0, tableScrollOffset: 0 };
     case "SET_LOADING_MORE":
       return { ...state, isLoadingMore: action.value };
     case "APPEND_MY_PRS": {

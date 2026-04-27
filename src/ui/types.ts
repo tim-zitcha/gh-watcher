@@ -1,8 +1,8 @@
 import type { AppConfig, PersistedState, PullRequestDetail, PullRequestSummary, SecuritySortMode, TrackedAttentionState } from "../types.js";
 
-export type AppMode = "pr" | "security";
+export type AppMode = "pr" | "security" | "messages";
 export type ActiveOverlay = "author" | "scope" | "custom" | null;
-export type ViewKey = "myPrs" | "needsMyReview" | "watchedAuthor" | "security";
+export type ViewKey = "myPrs" | "needsMyReview" | "watchedAuthor" | "security" | "messages";
 
 export interface WatchedAuthorOption { label: string; value: string | null; custom: boolean; }
 
@@ -37,6 +37,7 @@ export interface AppState {
   detailDiffVisible: boolean;
   detailDiffFileIndex: number;
   focusedPanel: "list" | "detail";
+  messagesShowAll: boolean;
 }
 
 export type Action =
@@ -65,4 +66,5 @@ export type Action =
   | { type: "SET_DETAIL_DIFF"; diff: string | null }
   | { type: "TOGGLE_DETAIL_DIFF" }
   | { type: "SET_DIFF_FILE_INDEX"; index: number }
-  | { type: "SET_FOCUSED_PANEL"; panel: "list" | "detail" };
+  | { type: "SET_FOCUSED_PANEL"; panel: "list" | "detail" }
+  | { type: "SET_MESSAGES_SHOW_ALL"; value: boolean };
