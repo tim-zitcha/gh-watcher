@@ -288,6 +288,144 @@ function Footer({ state }: { state: AppState }) {
   </Box>;
 }
 
+// ── PrList ────────────────────────────────────────────────────────────────────
+
+function PrList({ state, narrow }: { state: AppState; narrow: boolean }) {
+  const { stdout } = useStdout();
+  const cols = stdout?.columns ?? 200;
+  const rows = stdout?.rows ?? 24;
+  const visibleRows = Math.max(1, rows - 9);
+
+  const pullRequests = (() => {
+    switch (PR_VIEWS[state.currentPrViewIndex]!) {
+      case "myPullRequests": return state.attentionState.myPullRequests;
+      case "needsMyReview": return state.attentionState.needsMyReview;
+      case "waitingOnOthers": return state.attentionState.waitingOnOthers;
+      case "watchedAuthor": return state.attentionState.watchedAuthorPullRequests;
+      default: return [];
+    }
+  })();
+
+  function pad(s: string, w: number) {
+    if (s.length > w) return s.slice(0, Math.max(w - 3, 0)) + "...";
+    return s.padEnd(w);
+  }
+
+  const { selectedRowIndex } = state;
+  const scrollOffset = clampScroll(selectedRowIndex, state.tableScrollOffset, visibleRows);
+  const visible = pullRequests.slice(scrollOffset, scrollOffset + visibleRows);
+
+  if (narrow) {
+    const availWidth = Math.floor(cols * 0.38) - 4;
+    const prCol = 6; const ciCol = 5;
+    const titleWidth = Math.max(8, availWidth - prCol - ciCol - 2);
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor="cyan" width="38%">
+        <Text bold>{pad("PR", prCol)} {pad("CI", ciCol)} {pad("Title", titleWidth)}</Text>
+        <Text dimColor>Showing {scrollOffset + 1}-{scrollOffset + visible.length} of {pullRequests.length}</Text>
+        {visible.map((pr, i) => {
+          const ci = formatCiStatus(pr);
+          const selected = scrollOffset + i === selectedRowIndex;
+          return (
+            <Text key={pr.id} inverse={selected}>
+              {pad(`#${pr.number}`, prCol)}{" "}
+              <Text color={ci.color}>{pad(ci.symbol, ciCol)}</Text>
+              {pad(pr.title, titleWidth)}
+            </Text>
+          );
+        })}
+      </Box>
+    );
+  }
+
+  const availWidth = cols - 4;
+  const fixedCols = { state: 5, repo: 26, pr: 6, author: 14, ci: 10, reviewers: 22, activity: 14 };
+  const fixedTotal = Object.values(fixedCols).reduce((a, b) => a + b, 0) + 7;
+  const titleWidth = Math.max(20, availWidth - fixedTotal);
+
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" flexGrow={1}>
+      <Text bold>
+        {pad("State", fixedCols.state)} {pad("Repo", fixedCols.repo)} {pad("PR", fixedCols.pr)} {pad("Author", fixedCols.author)} {pad("CI", fixedCols.ci)} {pad("Reviewers", fixedCols.reviewers)} {pad("Activity", fixedCols.activity)} {pad("Title", titleWidth)}
+      </Text>
+      <Text dimColor>Showing {scrollOffset + 1}-{scrollOffset + visible.length} of {pullRequests.length}</Text>
+      {visible.map((pr, i) => {
+        const selected = scrollOffset + i === selectedRowIndex;
+        const badge = isUnread(state.persistedState, pr) ? "NEW" : "SEEN";
+        const ci = formatCiStatus(pr);
+        return (
+          <Text key={pr.id} inverse={selected}>
+            {pad(badge, fixedCols.state)} {pad(pr.repository, fixedCols.repo)} {pad(`#${pr.number}`, fixedCols.pr)} {pad(pr.author, fixedCols.author)}{" "}
+            <Text color={ci.color}>{pad(ci.symbol, fixedCols.ci)}</Text>
+            {" "}{pad(pr.requestedReviewers.join(", ") || "-", fixedCols.reviewers)} {pad(formatTimestamp(pr.activity.latestActivityAt), fixedCols.activity)} {pad(pr.title, titleWidth)}
+          </Text>
+        );
+      })}
+    </Box>
+  );
+}
+
+// ── SecurityList ──────────────────────────────────────────────────────────────
+
+function SecurityList({ state }: { state: AppState }) {
+  const { stdout } = useStdout();
+  const cols = stdout?.columns ?? 200;
+  const rows = stdout?.rows ?? 24;
+  const visibleRows = Math.max(1, rows - 9);
+
+  const { attentionState, securitySortMode, selectedRowIndex } = state;
+
+  if (!attentionState.repositoryScope?.startsWith("org:")) {
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor="cyan" flexGrow={1} paddingX={1}>
+        <Text>No org scope set. Press <Text bold>o</Text> to select an organization.</Text>
+      </Box>
+    );
+  }
+
+  const alerts = sortSecurityAlerts(attentionState.securityAlerts, securitySortMode);
+  const scrollOffset = clampScroll(selectedRowIndex, state.tableScrollOffset, visibleRows);
+  const visible = alerts.slice(scrollOffset, scrollOffset + visibleRows);
+
+  function pad(s: string, w: number) {
+    if (s.length > w) return s.slice(0, Math.max(w - 3, 0)) + "...";
+    return s.padEnd(w);
+  }
+
+  const availWidth = cols - 4;
+  const fixedCols = { severity: 8, repo: 28, pkg: 20, ecosystem: 10, cve: 20, opened: 12 };
+  const fixedTotal = Object.values(fixedCols).reduce((a, b) => a + b, 0) + 5;
+  const summaryWidth = Math.max(20, availWidth - fixedTotal);
+
+  function severityColor(s: AlertSeverity): string {
+    switch (s) {
+      case "critical": return "red";
+      case "high": return "magenta";
+      case "medium": return "yellow";
+      case "low": return "cyan";
+      default: return "gray";
+    }
+  }
+
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" flexGrow={1}>
+      <Text bold>
+        {pad("Severity", fixedCols.severity)} {pad("Repo", fixedCols.repo)} {pad("Package", fixedCols.pkg)} {pad("Ecosystem", fixedCols.ecosystem)} {pad("CVE", fixedCols.cve)} {pad("Opened", fixedCols.opened)} {pad("Summary", summaryWidth)}
+      </Text>
+      <Text dimColor>Showing {scrollOffset + 1}-{scrollOffset + visible.length} of {alerts.length} · sort: {securitySortMode}</Text>
+      {visible.map((alert, i) => {
+        const selected = scrollOffset + i === selectedRowIndex;
+        return (
+          <Text key={alert.ghsaId} inverse={selected}>
+            <Text color={severityColor(alert.severity)}>{pad(alert.severity.toUpperCase(), fixedCols.severity)}</Text>
+            {" "}{pad(alert.repository, fixedCols.repo)} {pad(alert.package, fixedCols.pkg)} {pad(alert.ecosystem ?? "-", fixedCols.ecosystem)} {pad(alert.cveId ?? "-", fixedCols.cve)} {pad(formatTimestamp(alert.createdAt), fixedCols.opened)} {pad(alert.summary ?? "-", summaryWidth)}
+          </Text>
+        );
+      })}
+    </Box>
+  );
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function runDashboard(options: DashboardOptions): Promise<void> {
