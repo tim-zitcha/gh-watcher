@@ -10,6 +10,7 @@ export function Footer({ state }: { state: AppState }) {
       <Box borderStyle="single" borderColor="blue" paddingX={1}>
         <Text dimColor>j/k move</Text>{sep}
         <Text dimColor>Enter open in browser</Text>{sep}
+        <Text dimColor>m mark read  M mark all read</Text>{sep}
         <Text dimColor>a all/unread</Text>{sep}
         <Text dimColor>1/2/3 mode</Text>{sep}
         <Text dimColor>r refresh  q quit</Text>

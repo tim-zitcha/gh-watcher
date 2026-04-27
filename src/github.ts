@@ -1044,6 +1044,27 @@ export async function fetchPullRequestDiff(
   });
 }
 
+async function ghMutate(method: "PATCH" | "PUT", path: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("gh", ["api", "--method", method, path], { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    child.on("error", reject);
+    child.on("close", (code: number | null) => {
+      if (code !== 0) { reject(new Error(stderr.trim() || `gh api ${method} exited with code ${code}`)); return; }
+      resolve();
+    });
+  });
+}
+
+export async function markNotificationRead(threadId: string): Promise<void> {
+  await ghMutate("PATCH", `/notifications/threads/${encodeURIComponent(threadId)}`);
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await ghMutate("PUT", "/notifications");
+}
+
 export async function fetchNotifications(): Promise<GitHubNotification[]> {
   const payload = await runGhRest(
     "/notifications?all=false&per_page=50"

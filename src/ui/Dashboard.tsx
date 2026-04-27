@@ -6,7 +6,7 @@ import { buildNotifications, sortPullRequests } from "../domain.js";
 import {
   extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData,
   fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff,
-  fetchPullRequestsAuthoredBy
+  fetchPullRequestsAuthoredBy, markNotificationRead, markAllNotificationsRead,
 } from "../github.js";
 import { sendNotifications } from "../notify.js";
 import { isUnread, markSeen, saveState, updateWatchedAuthors } from "../state.js";
@@ -601,6 +601,22 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       const newState = markSeen(state.persistedState, prs);
       dispatch({ type: "SET_PERSISTED_STATE", state: newState });
       void saveState(options.config.stateFilePath, newState);
+      return;
+    }
+    if (input === "m" && state.mode === "messages") {
+      const items = state.messagesShowAll
+        ? state.attentionState.notifications
+        : state.attentionState.notifications.filter(n => n.unread);
+      const n = items[state.selectedRowIndex];
+      if (n?.unread) {
+        dispatch({ type: "MARK_NOTIFICATION_READ", threadId: n.id });
+        void markNotificationRead(n.id).catch(() => { /* best-effort */ });
+      }
+      return;
+    }
+    if (input === "M" && state.mode === "messages") {
+      dispatch({ type: "MARK_ALL_NOTIFICATIONS_READ" });
+      void markAllNotificationsRead().catch(() => { /* best-effort */ });
       return;
     }
     if (input === "d" && state.detailOpen) {

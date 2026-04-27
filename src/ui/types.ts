@@ -67,4 +67,6 @@ export type Action =
   | { type: "TOGGLE_DETAIL_DIFF" }
   | { type: "SET_DIFF_FILE_INDEX"; index: number }
   | { type: "SET_FOCUSED_PANEL"; panel: "list" | "detail" }
-  | { type: "SET_MESSAGES_SHOW_ALL"; value: boolean };
+  | { type: "SET_MESSAGES_SHOW_ALL"; value: boolean }
+  | { type: "MARK_NOTIFICATION_READ"; threadId: string }
+  | { type: "MARK_ALL_NOTIFICATIONS_READ" };

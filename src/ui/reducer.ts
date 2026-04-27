@@ -54,6 +54,19 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, focusedPanel: action.panel };
     case "SET_MESSAGES_SHOW_ALL":
       return { ...state, messagesShowAll: action.value, selectedRowIndex: 0, tableScrollOffset: 0 };
+    case "MARK_NOTIFICATION_READ": {
+      const a = state.attentionState;
+      const notifications = a.notifications.map(n =>
+        n.id === action.threadId ? { ...n, unread: false } : n
+      );
+      const unreadCount = notifications.filter(n => n.unread).length;
+      return { ...state, attentionState: { ...a, notifications, notificationUnreadCount: unreadCount } };
+    }
+    case "MARK_ALL_NOTIFICATIONS_READ": {
+      const a = state.attentionState;
+      const notifications = a.notifications.map(n => ({ ...n, unread: false }));
+      return { ...state, attentionState: { ...a, notifications, notificationUnreadCount: 0 } };
+    }
     case "SET_LOADING_MORE":
       return { ...state, isLoadingMore: action.value };
     case "APPEND_MY_PRS": {
