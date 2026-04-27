@@ -43,11 +43,11 @@ export function formatCiStatus(pr: PullRequestSummary): { symbol: string; color:
       default: return { symbol: "-", color: "gray" };
     }
   }
-  const parts: string[] = [];
-  if (passing > 0) parts.push(`✓${passing}`);
-  if (failing > 0) parts.push(`✗${failing}`);
-  if (pending > 0) parts.push(`●${pending}`);
-  return { symbol: parts.join(" "), color: failing > 0 ? "red" : pending > 0 ? "yellow" : "green" };
+  // Always return a compact ≤2 char symbol — show worst state first so it fits in the list column.
+  // Full check detail is available in the PR detail panel.
+  if (failing > 0) return { symbol: failing > 9 ? "✗!" : `✗${failing}`, color: "red" };
+  if (pending > 0) return { symbol: "~", color: "yellow" };
+  return { symbol: "✓", color: "green" };
 }
 
 export function sortSecurityAlerts(alerts: SecurityAlert[], mode: SecuritySortMode): SecurityAlert[] {

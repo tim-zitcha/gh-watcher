@@ -85,7 +85,7 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
   return (
     <Box flexDirection="column" borderStyle="single" borderColor={focusColor} flexGrow={1}>
       <Text dimColor>
-        {pad("·", unreadCol)} {pad("CI", ciCol)} {pad("R", revCol)} {pad("Title", titleWidth)} {pad("Repo", repoCol)} {pad("Author", authorCol)} {pad("Age", ageCol)}
+        {pad("·", unreadCol)} {pad("CI", ciCol)} {pad("Rev", revCol)} {pad("Title", titleWidth)} {pad("Repo", repoCol)} {pad("Author", authorCol)} {pad("Age", ageCol)}
       </Text>
       <Text dimColor>{showingLabel}</Text>
       {visible.map((pr, i) => {
