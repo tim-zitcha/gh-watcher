@@ -24,6 +24,69 @@ const PR_VIEWS: ViewName[] = ["myPullRequests", "needsMyReview", "waitingOnOther
 const SEVERITY_RANK: Record<AlertSeverity, number> = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
 const COMMON_WATCHED_AUTHORS = ["dependabot[bot]"];
 
+// ── Formatting helpers ────────────────────────────────────────────────────────
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/\r/g, "")
+    .replace(/<details[^>]*>/gi, "").replace(/<\/details>/gi, "")
+    .replace(/<summary[^>]*>(.*?)<\/summary>/gis, "[$1]")
+    .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gis, "\n## $1\n")
+    .replace(/<li[^>]*>/gi, "\n  - ").replace(/<\/li>/gi, "")
+    .replace(/<ul[^>]*>|<\/ul>|<ol[^>]*>|<\/ol>/gi, "")
+    .replace(/<p[^>]*>/gi, "\n").replace(/<\/p>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<strong[^>]*>(.*?)<\/strong>/gis, "*$1*")
+    .replace(/<em[^>]*>(.*?)<\/em>/gis, "_$1_")
+    .replace(/<code[^>]*>(.*?)<\/code>/gis, "`$1`")
+    .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gis, "$2 ($1)")
+    .replace(/<blockquote[^>]*>/gi, "\n> ").replace(/<\/blockquote>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
+    .replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function formatCiStatus(pr: PullRequestSummary): { symbol: string; color: string } {
+  const { passing, failing, pending } = pr.checkCounts;
+  const total = passing + failing + pending;
+  if (total === 0) {
+    switch (pr.ciStatus) {
+      case "SUCCESS": return { symbol: "✓", color: "green" };
+      case "FAILURE": case "ERROR": return { symbol: "✗", color: "red" };
+      case "PENDING": case "EXPECTED": return { symbol: "●", color: "yellow" };
+      default: return { symbol: "-", color: "gray" };
+    }
+  }
+  const parts: string[] = [];
+  if (passing > 0) parts.push(`✓${passing}`);
+  if (failing > 0) parts.push(`✗${failing}`);
+  if (pending > 0) parts.push(`●${pending}`);
+  return { symbol: parts.join(" "), color: failing > 0 ? "red" : pending > 0 ? "yellow" : "green" };
+}
+
+function sortSecurityAlerts(alerts: SecurityAlert[], mode: SecuritySortMode): SecurityAlert[] {
+  return [...alerts].sort((a, b) => {
+    if (mode === "severity") {
+      const diff = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+      if (diff !== 0) return diff;
+    }
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+}
+
+function clampScroll(selectedRow: number, currentOffset: number, visibleRows: number): number {
+  if (selectedRow < currentOffset) return selectedRow;
+  if (selectedRow >= currentOffset + visibleRows) return selectedRow - visibleRows + 1;
+  return currentOffset;
+}
+
 // ── Shared types ─────────────────────────────────────────────────────────────
 
 type AppMode = "pr" | "security";
@@ -138,6 +201,91 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, authorCandidates: action.candidates };
     default: return state;
   }
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+function Header({ state }: { state: AppState }) {
+  const { attentionState, persistedState, mode, lastStatus } = state;
+  const scopeLabel = attentionState.repositoryScope ?? "all accessible repos";
+  const refreshedLabel = `Refreshed: ${formatTimestamp(attentionState.refreshedAt)}`;
+  const alerts = attentionState.securityAlerts;
+  const hasCrit = alerts.some(a => a.severity === "critical");
+  const hasHigh = alerts.some(a => a.severity === "high");
+  const alertCounts = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
+  for (const a of alerts) alertCounts[a.severity]++;
+  const total = attentionState.securityAlertTotal;
+  const shown = alerts.length;
+  const totalLabel = total > shown ? `${total} total, showing ${shown}` : `${shown} open`;
+
+  if (mode === "security") {
+    const org = attentionState.repositoryScope?.startsWith("org:")
+      ? attentionState.repositoryScope.slice(4) : null;
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
+        <Text>
+          <Text bold>gh-watcher</Text>{"  "}
+          <Text inverse> ⚠ SECURITY{org ? ` — ${org}` : ""} </Text>
+          {"  "}Scope: {scopeLabel}{"  "}{refreshedLabel}{"  "}Status: {lastStatus}
+        </Text>
+        <Text>
+          <Text bold>{totalLabel}</Text>
+          {"   "}<Text color="red">CRIT: {alertCounts.critical}</Text>
+          {"  "}<Text color="magenta">HIGH: {alertCounts.high}</Text>
+          {"  "}<Text color="yellow">MED: {alertCounts.medium}</Text>
+          {"  "}<Text color="cyan">LOW: {alertCounts.low}</Text>
+          {"   "}<Text dimColor>s=sort  S=PRs</Text>
+        </Text>
+      </Box>
+    );
+  }
+
+  const view = PR_VIEWS[state.currentPrViewIndex]!;
+  const { myPullRequests, needsMyReview, waitingOnOthers, watchedAuthorPullRequests, watchedAuthorTotal, watchedAuthor } = attentionState;
+  const recentUsers = persistedState.watchedAuthors.recent.join(", ") || "none";
+
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
+      <Box gap={2}>
+        <Text bold>gh-watcher</Text>
+        <Text dimColor>S → Security</Text>
+        {hasCrit && <Text color="red">⚠ CRIT</Text>}
+        {!hasCrit && hasHigh && <Text color="magenta">⚠ HIGH</Text>}
+      </Box>
+      <Box gap={2}>
+        {(["myPullRequests", "needsMyReview", "waitingOnOthers", "watchedAuthor"] as ViewName[]).map((v) => {
+          const count = v === "myPullRequests" ? myPullRequests.length
+            : v === "needsMyReview" ? needsMyReview.length
+            : v === "waitingOnOthers" ? waitingOnOthers.length
+            : watchedAuthorTotal > watchedAuthorPullRequests.length
+              ? `${watchedAuthorPullRequests.length}+` : watchedAuthorPullRequests.length;
+          const label = v === "myPullRequests" ? "My PRs"
+            : v === "needsMyReview" ? "Needs My Review"
+            : v === "waitingOnOthers" ? "Waiting On Others"
+            : `Authored By ${watchedAuthor ?? "User"}`;
+          return <Text key={v} inverse={view === v}>{label} ({count})</Text>;
+        })}
+      </Box>
+      <Text>Author: {watchedAuthor ?? "none"}{"  "}Scope: {scopeLabel}{"  "}{refreshedLabel}{"  "}Status: {lastStatus}</Text>
+      <Text dimColor>Recent watched: {recentUsers}</Text>
+    </Box>
+  );
+}
+
+// ── Footer ────────────────────────────────────────────────────────────────────
+
+function Footer({ state }: { state: AppState }) {
+  if (state.mode === "security") {
+    return <Box borderStyle="single" borderColor="cyan" paddingX={1}>
+      <Text dimColor>j/k move  Enter open  s sort severity/age  o org  r refresh  S back to PRs  q quit</Text>
+    </Box>;
+  }
+  return <Box borderStyle="single" borderColor="cyan" paddingX={1}>
+    <Text dimColor>{state.detailOpen
+      ? "j/k navigate  ↑↓ scroll detail  o open in GitHub  Esc close detail  q quit"
+      : "j/k move  Enter open detail  m mark seen  M mark all  Tab views  / author  o org  r refresh  S security  q quit"
+    }</Text>
+  </Box>;
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
