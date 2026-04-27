@@ -3,14 +3,22 @@ import { spawn } from "node:child_process";
 import type { ActivitySnapshot, AlertSeverity, ChangedFile, CheckRun, CheckCounts, CiStatus, PullRequestDetail, PullRequestSummary, ReviewSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
 import { isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
 
-const SEARCH_PAGE_SIZE = 30;
-const MAX_SEARCH_RESULTS = 90;
-const MAX_AUTHORED_BY_RESULTS = 30;
-const ACTIVITY_CHUNK_SIZE = 12;
+const SEARCH_PAGE_SIZE = 30; // GitHub recommends ≤30 for search; larger pages hit timeout limits
+const ACTIVITY_CHUNK_SIZE = 12; // nodes(ids:) has a 100-node hard cap; 12 keeps queries small
+
+function parseGraphQL<T>(payload: string, queryName: string): T {
+  const json = JSON.parse(payload) as { errors?: Array<{ message: string }>; data?: T };
+  if (json.errors && json.errors.length > 0) {
+    const messages = json.errors.map((e) => e.message).join("; ");
+    throw new Error(`GraphQL error in ${queryName}: ${messages}`);
+  }
+  return json as T;
+}
 
 const SEARCH_QUERY = `
   query SearchPullRequests($searchQuery: String!, $pageSize: Int!, $after: String) {
     search(query: $searchQuery, type: ISSUE, first: $pageSize, after: $after) {
+      issueCount
       pageInfo {
         hasNextPage
         endCursor
@@ -87,7 +95,7 @@ const ORGANIZATION_MEMBERS_QUERY = `
   }
 `;
 
-interface PullRequestNode {
+export interface PullRequestNode {
   id: string;
   number: number;
   title: string;
@@ -152,6 +160,7 @@ interface PullRequestNode {
 interface SearchResponse {
   data: {
     search: {
+      issueCount: number;
       pageInfo: {
         hasNextPage: boolean;
         endCursor: string | null;
@@ -281,6 +290,10 @@ function spawnGhApi(
   });
 }
 
+function isRateLimitError(message: string): boolean {
+  return message.includes("API rate limit exceeded") || message.includes("secondary rate limit");
+}
+
 async function runGhApi(
   query: string,
   variables: Record<string, string | number | null | undefined> = {},
@@ -289,6 +302,10 @@ async function runGhApi(
   try {
     return await spawnGhApi(query, variables);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isRateLimitError(message)) {
+      throw new Error(`GitHub rate limit exceeded — wait a moment and try again. (${message})`);
+    }
     if (attempt < MAX_RETRIES) {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
       return runGhApi(query, variables, attempt + 1);
@@ -402,7 +419,7 @@ export function mapPullRequestNode(node: PullRequestNode): PullRequestSummary {
 }
 
 export function parseSearchResponse(payload: string): PullRequestSummary[] {
-  const parsed = JSON.parse(payload) as SearchResponse;
+  const parsed = parseGraphQL<SearchResponse>(payload, "SearchPullRequests");
   return parsed.data.search.nodes
     .filter((node): node is PullRequestNode => Boolean(node))
     .map(mapPullRequestNode);
@@ -412,15 +429,17 @@ function parseSearchPage(payload: string): {
   pullRequests: PullRequestSummary[];
   hasNextPage: boolean;
   endCursor: string | null;
+  issueCount: number;
 } {
-  const parsed = JSON.parse(payload) as SearchResponse;
+  const parsed = parseGraphQL<SearchResponse>(payload, "SearchPullRequests");
 
   return {
     pullRequests: parsed.data.search.nodes
       .filter((node): node is PullRequestNode => Boolean(node))
       .map(mapPullRequestNode),
     hasNextPage: parsed.data.search.pageInfo.hasNextPage,
-    endCursor: parsed.data.search.pageInfo.endCursor
+    endCursor: parsed.data.search.pageInfo.endCursor,
+    issueCount: parsed.data.search.issueCount
   };
 }
 
@@ -474,7 +493,7 @@ function buildActivityQuery(ids: string[]): string {
 }
 
 function parseActivityResponse(payload: string): Map<string, Pick<PullRequestSummary, "activity" | "ciStatus" | "checkCounts">> {
-  const parsed = JSON.parse(payload) as ActivityResponse;
+  const parsed = parseGraphQL<ActivityResponse>(payload, "FetchActivitySnapshots");
   return new Map(
     parsed.data.nodes
       .filter((node): node is NonNullable<ActivityResponse["data"]["nodes"][number]> => Boolean(node))
@@ -509,48 +528,33 @@ async function fetchActivitySnapshots(ids: string[]): Promise<Map<string, Pick<P
   return snapshots;
 }
 
-async function searchPullRequests(
+async function fetchPrPage(
   searchQuery: string,
-  maxSearchResults = MAX_SEARCH_RESULTS
-): Promise<PullRequestSummary[]> {
-  const pullRequests: PullRequestSummary[] = [];
-  let after: string | null = null;
-  let hasNextPage = true;
-
-  while (hasNextPage && pullRequests.length < maxSearchResults) {
-    const payload = await runGhApi(SEARCH_QUERY, {
-      searchQuery,
-      pageSize: Math.min(SEARCH_PAGE_SIZE, maxSearchResults - pullRequests.length),
-      after
-    });
-    const page = parseSearchPage(payload);
-    pullRequests.push(...page.pullRequests);
-    hasNextPage = page.hasNextPage;
-    after = page.endCursor;
-  }
-
-  const activitySnapshots = await fetchActivitySnapshots(pullRequests.map((pullRequest) => pullRequest.id));
-
-  return pullRequests.map((pullRequest) => {
-    const snap = activitySnapshots.get(pullRequest.id);
-    return {
-      ...pullRequest,
-      activity: snap?.activity ?? pullRequest.activity,
-      ciStatus: snap?.ciStatus ?? pullRequest.ciStatus,
-      checkCounts: snap?.checkCounts ?? pullRequest.checkCounts
-    };
+  cursor: string | null
+): Promise<{ pullRequests: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
+  const payload = await runGhApi(SEARCH_QUERY, {
+    searchQuery,
+    pageSize: SEARCH_PAGE_SIZE,
+    after: cursor
   });
+  const page = parseSearchPage(payload);
+  const activitySnapshots = await fetchActivitySnapshots(page.pullRequests.map((pr) => pr.id));
+  const enriched = page.pullRequests.map((pr) => {
+    const snap = activitySnapshots.get(pr.id);
+    return snap ? { ...pr, activity: snap.activity, ciStatus: snap.ciStatus, checkCounts: snap.checkCounts } : pr;
+  });
+  return { pullRequests: enriched, hasMore: page.hasNextPage, nextCursor: page.endCursor, totalCount: page.issueCount };
 }
 
 export async function fetchViewerLogin(): Promise<string> {
   const payload = await runGhApi(VIEWER_QUERY);
-  const parsed = JSON.parse(payload) as ViewerResponse;
+  const parsed = parseGraphQL<ViewerResponse>(payload, "Viewer");
   return parsed.data.viewer.login;
 }
 
 export async function fetchViewerOrganizations(): Promise<string[]> {
   const payload = await runGhApi(VIEWER_ORGANIZATIONS_QUERY);
-  const parsed = JSON.parse(payload) as ViewerOrganizationsResponse;
+  const parsed = parseGraphQL<ViewerOrganizationsResponse>(payload, "ViewerOrganizations");
 
   return parsed.data.viewer.organizations.nodes
     .filter((organization): organization is { login: string } => Boolean(organization))
@@ -561,7 +565,7 @@ export async function fetchOrganizationMembers(organization: string): Promise<st
   const payload = await runGhApi(ORGANIZATION_MEMBERS_QUERY, {
     organization
   });
-  const parsed = JSON.parse(payload) as OrganizationMembersResponse;
+  const parsed = parseGraphQL<OrganizationMembersResponse>(payload, "OrganizationMembers");
 
   return parsed.data.organization?.membersWithRole.nodes
     .filter((member): member is { login: string } => Boolean(member))
@@ -569,51 +573,27 @@ export async function fetchOrganizationMembers(organization: string): Promise<st
     .sort((left, right) => left.localeCompare(right)) ?? [];
 }
 
-async function searchPullRequestsWithMeta(
-  searchQuery: string,
-  limit: number
-): Promise<{ pullRequests: PullRequestSummary[]; hasMore: boolean }> {
-  const payload = await runGhApi(SEARCH_QUERY, {
-    searchQuery,
-    pageSize: Math.min(SEARCH_PAGE_SIZE, limit),
-    after: null
-  });
-  const page = parseSearchPage(payload);
-  const pullRequests = page.pullRequests.slice(0, limit);
-  const hasMore = page.hasNextPage || page.pullRequests.length > limit;
-
-  const activitySnapshots = await fetchActivitySnapshots(pullRequests.map((pr) => pr.id));
-  const enriched = pullRequests.map((pr) => {
-    const snap = activitySnapshots.get(pr.id);
-    return {
-      ...pr,
-      activity: snap?.activity ?? pr.activity,
-      ciStatus: snap?.ciStatus ?? pr.ciStatus,
-      checkCounts: snap?.checkCounts ?? pr.checkCounts
-    };
-  });
-
-  return { pullRequests: enriched, hasMore };
-}
-
 export async function fetchPullRequestsAuthoredBy(options: {
   author: string;
   includeDrafts: boolean;
   repositoryScope: string | null;
-}): Promise<{ pullRequests: PullRequestSummary[]; hasMore: boolean }> {
-  const { pullRequests, hasMore } = await searchPullRequestsWithMeta(
+  cursor?: string | null;
+}): Promise<{ pullRequests: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
+  const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(
     scopedSearchQuery(
       `is:open is:pr archived:false sort:updated-desc author:${options.author}`,
       options.repositoryScope
     ),
-    MAX_AUTHORED_BY_RESULTS
+    options.cursor ?? null
   );
 
   return {
     pullRequests: sortPullRequests(
       pullRequests.filter((pr) => shouldIncludePullRequest(pr, options.includeDrafts))
     ),
-    hasMore
+    hasMore,
+    nextCursor,
+    totalCount
   };
 }
 
@@ -887,7 +867,7 @@ export async function fetchPullRequestDetail(
   number: number
 ): Promise<PullRequestDetail> {
   const payload = await runGhApi(PULL_REQUEST_DETAIL_QUERY, { owner, repo, number });
-  const parsed = JSON.parse(payload) as PullRequestDetailResponse;
+  const parsed = parseGraphQL<PullRequestDetailResponse>(payload, "PullRequestDetail");
   const pr = parsed.data.repository?.pullRequest;
 
   if (!pr) {
@@ -946,41 +926,48 @@ export async function fetchMyPrsData(options: {
   viewerLogin: string;
   includeDrafts: boolean;
   repositoryScope: string | null;
-}): Promise<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[] }> {
+  cursor?: string | null;
+}): Promise<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
   const { viewerLogin, includeDrafts, repositoryScope } = options;
-  const results = await searchPullRequests(
+  const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(
     scopedSearchQuery(
       `is:open is:pr archived:false sort:updated-desc author:${viewerLogin}`,
       repositoryScope
-    )
+    ),
+    options.cursor ?? null
   );
   const myPullRequests = sortPullRequests(
-    results.filter((pr) => shouldIncludePullRequest(pr, includeDrafts))
+    pullRequests.filter((pr) => shouldIncludePullRequest(pr, includeDrafts))
   );
   const waitingOnOthers = sortPullRequests(
     myPullRequests.filter((pr) => shouldTrackWaitingOnOthers(pr, viewerLogin))
   );
-  return { myPullRequests, waitingOnOthers };
+  return { myPullRequests, waitingOnOthers, hasMore, nextCursor, totalCount };
 }
 
 export async function fetchNeedsMyReviewData(options: {
   viewerLogin: string;
   includeDrafts: boolean;
   repositoryScope: string | null;
-}): Promise<{ needsMyReview: PullRequestSummary[] }> {
+  cursor?: string | null;
+}): Promise<{ needsMyReview: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
   const { viewerLogin, includeDrafts, repositoryScope } = options;
-  const results = await searchPullRequests(
+  const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(
     scopedSearchQuery(
       `is:open is:pr archived:false sort:updated-desc review-requested:${viewerLogin}`,
       repositoryScope
-    )
+    ),
+    options.cursor ?? null
   );
   return {
     needsMyReview: sortPullRequests(
-      results.filter(
+      pullRequests.filter(
         (pr) => shouldIncludePullRequest(pr, includeDrafts) && isRequestedReviewer(pr, viewerLogin)
       )
-    )
+    ),
+    hasMore,
+    nextCursor,
+    totalCount
   };
 }
 
@@ -998,7 +985,7 @@ export async function fetchAllViews(options: {
     fetchNeedsMyReviewData({ viewerLogin, includeDrafts, repositoryScope }),
     watchedAuthor
       ? fetchPullRequestsAuthoredBy({ author: watchedAuthor, includeDrafts, repositoryScope })
-      : Promise.resolve({ pullRequests: [], hasMore: false }),
+      : Promise.resolve({ pullRequests: [], hasMore: false, nextCursor: null, totalCount: 0 }),
     org ? fetchDependabotAlerts(org) : Promise.resolve({ alerts: [], total: 0 })
   ]);
 
@@ -1009,14 +996,48 @@ export async function fetchAllViews(options: {
     repositoryScope,
     watchedAuthor,
     myPullRequests: myPrsData.myPullRequests,
+    myPullRequestsHasMore: myPrsData.hasMore,
+    myPullRequestsNextCursor: myPrsData.nextCursor,
+    myPullRequestsTotalCount: myPrsData.totalCount,
     needsMyReview: needsMyReviewData.needsMyReview,
+    needsMyReviewHasMore: needsMyReviewData.hasMore,
+    needsMyReviewNextCursor: needsMyReviewData.nextCursor,
+    needsMyReviewTotalCount: needsMyReviewData.totalCount,
     waitingOnOthers: myPrsData.waitingOnOthers,
     watchedAuthorPullRequests,
-    watchedAuthorTotal: watchedAuthorSearch.hasMore
-      ? watchedAuthorPullRequests.length + 1
-      : watchedAuthorPullRequests.length,
+    watchedAuthorHasMore: watchedAuthorSearch.hasMore,
+    watchedAuthorNextCursor: watchedAuthorSearch.nextCursor,
+    watchedAuthorTotalCount: watchedAuthorSearch.totalCount,
     securityAlerts: securityAlerts.alerts,
     securityAlertTotal: securityAlerts.total,
     refreshedAt: new Date().toISOString()
   };
+}
+
+export async function fetchPullRequestDiff(
+  owner: string,
+  repo: string,
+  number: number
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "gh",
+      ["pr", "diff", String(number), "--repo", `${owner}/${repo}`],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `gh pr diff exited with code ${code}`));
+        return;
+      }
+      resolve(stdout);
+    });
+  });
 }
