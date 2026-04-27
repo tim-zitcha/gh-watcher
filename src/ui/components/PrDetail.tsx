@@ -113,7 +113,7 @@ export function PrDetail({ state }: { state: AppState }) {
   const panelWidth = Math.floor(cols * 0.62) - 3;
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="yellow" width="62%" flexShrink={0}>
+    <Box flexDirection="column" borderStyle="single" borderColor={state.focusedPanel === "detail" ? "yellow" : "gray"} width="62%" flexShrink={0}>
       {visible.map((line, i) => (
         <Box key={i} justifyContent="space-between">
           <Text bold={line.bold} color={line.color} dimColor={line.dimColor}>{truncate(line.text || " ", panelWidth)}</Text>

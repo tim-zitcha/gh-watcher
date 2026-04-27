@@ -10,7 +10,7 @@ export function Footer({ state }: { state: AppState }) {
   }
   return <Box borderStyle="single" borderColor="cyan" paddingX={1}>
     <Text dimColor>{state.detailOpen
-      ? "j/k navigate  ↑↓ scroll detail  d diff  < > file  o open in GitHub  Esc close detail  q quit"
+      ? "← → switch panel  j/k prev/next PR  ↑↓ scroll detail  d diff  < > file  o open  Esc close  q quit"
       : "j/k move  Enter open detail  m mark seen  M mark all  Tab views  / author  o org  r refresh  S security  q quit"
     }</Text>
   </Box>;

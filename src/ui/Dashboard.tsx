@@ -54,6 +54,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     detailDiff: null,
     detailDiffVisible: false,
     detailDiffFileIndex: 0,
+    focusedPanel: "list" as AppState["focusedPanel"],
   }));
 
   const isRefreshingRef = useRef(false);
@@ -395,18 +396,56 @@ function Dashboard({ options }: { options: DashboardOptions }) {
   useInput((input, key) => {
     if (state.activeOverlay) return;
 
+    if (key.leftArrow && state.detailOpen) {
+      dispatch({ type: "SET_FOCUSED_PANEL", panel: "list" });
+      return;
+    }
+    if (key.rightArrow && state.detailOpen) {
+      dispatch({ type: "SET_FOCUSED_PANEL", panel: "detail" });
+      return;
+    }
     if (key.upArrow) {
-      if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset - 1 });
-      else moveSelection(-1);
+      if (state.detailOpen && state.focusedPanel === "detail") {
+        dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset - 1 });
+      } else {
+        moveSelection(-1);
+        if (state.detailOpen) {
+          const pr = getPrsForCurrentView()[Math.max(0, state.selectedRowIndex - 1)];
+          if (pr) void openDetail(pr);
+        }
+      }
       return;
     }
     if (key.downArrow) {
-      if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset + 1 });
-      else moveSelection(1);
+      if (state.detailOpen && state.focusedPanel === "detail") {
+        dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset + 1 });
+      } else {
+        moveSelection(1);
+        if (state.detailOpen) {
+          const prs = getPrsForCurrentView();
+          const pr = prs[Math.min(prs.length - 1, state.selectedRowIndex + 1)];
+          if (pr) void openDetail(pr);
+        }
+      }
       return;
     }
-    if (input === "k") { moveSelection(-1); return; }
-    if (input === "j") { moveSelection(1); return; }
+    if (input === "k") {
+      moveSelection(-1);
+      if (state.detailOpen && state.focusedPanel === "list") {
+        const pr = getPrsForCurrentView()[Math.max(0, state.selectedRowIndex - 1)];
+        if (pr) void openDetail(pr);
+      }
+      return;
+    }
+    if (input === "j") {
+      moveSelection(1);
+      if (state.detailOpen && state.focusedPanel === "list") {
+        const prs = getPrsForCurrentView();
+        const pr = prs[Math.min(prs.length - 1, state.selectedRowIndex + 1)];
+        if (pr) void openDetail(pr);
+      }
+      return;
+    }
     if (key.pageUp || (key.ctrl && input === "u")) {
       if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset - 10 });
       else moveSelection(-10);

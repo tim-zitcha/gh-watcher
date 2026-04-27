@@ -36,6 +36,7 @@ export interface AppState {
   detailDiff: string | null;
   detailDiffVisible: boolean;
   detailDiffFileIndex: number;
+  focusedPanel: "list" | "detail";
 }
 
 export type Action =
@@ -63,4 +64,5 @@ export type Action =
   | { type: "SET_LOADING_MORE"; value: boolean }
   | { type: "SET_DETAIL_DIFF"; diff: string | null }
   | { type: "TOGGLE_DETAIL_DIFF" }
-  | { type: "SET_DIFF_FILE_INDEX"; index: number };
+  | { type: "SET_DIFF_FILE_INDEX"; index: number }
+  | { type: "SET_FOCUSED_PANEL"; panel: "list" | "detail" };

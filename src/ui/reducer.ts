@@ -37,19 +37,21 @@ export function reducer(state: AppState, action: Action): AppState {
     case "SET_LOADING_MESSAGE":
       return { ...state, loadingMessage: action.message };
     case "OPEN_DETAIL":
-      return { ...state, detailOpen: true, detailPr: action.pr, detailData: null, detailLoading: true, detailScrollOffset: 0, detailDiff: null, detailDiffVisible: false, detailDiffFileIndex: 0 };
+      return { ...state, detailOpen: true, detailPr: action.pr, detailData: null, detailLoading: true, detailScrollOffset: 0, detailDiff: null, detailDiffVisible: false, detailDiffFileIndex: 0, focusedPanel: "detail" };
     case "SET_DETAIL_DATA":
       return { ...state, detailData: action.data, detailLoading: false };
     case "SET_DETAIL_SCROLL":
       return { ...state, detailScrollOffset: Math.max(0, action.offset) };
     case "CLOSE_DETAIL":
-      return { ...state, detailOpen: false, detailPr: null, detailData: null, detailLoading: false, detailScrollOffset: 0, detailDiff: null, detailDiffVisible: false, detailDiffFileIndex: 0 };
+      return { ...state, detailOpen: false, detailPr: null, detailData: null, detailLoading: false, detailScrollOffset: 0, detailDiff: null, detailDiffVisible: false, detailDiffFileIndex: 0, focusedPanel: "list" };
     case "SET_DETAIL_DIFF":
       return { ...state, detailDiff: action.diff };
     case "TOGGLE_DETAIL_DIFF":
       return { ...state, detailDiffVisible: !state.detailDiffVisible, detailDiffFileIndex: 0, detailScrollOffset: 0 };
     case "SET_DIFF_FILE_INDEX":
       return { ...state, detailDiffFileIndex: action.index };
+    case "SET_FOCUSED_PANEL":
+      return { ...state, focusedPanel: action.panel };
     case "SET_LOADING_MORE":
       return { ...state, isLoadingMore: action.value };
     case "APPEND_MY_PRS": {
