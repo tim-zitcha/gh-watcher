@@ -55,6 +55,8 @@ export interface TrackedAttentionState {
   watchedAuthorTotalCount?: number;
   securityAlerts: SecurityAlert[];
   securityAlertTotal: number;
+  notifications: GitHubNotification[];
+  notificationUnreadCount: number;
   refreshedAt: string;
 }
 
@@ -111,6 +113,32 @@ export interface SecurityAlert {
   ghsaId: string;
   createdAt: string;
   url: string;
+}
+
+export type NotificationReason =
+  | "mention"
+  | "review_requested"
+  | "assign"
+  | "author"
+  | "comment"
+  | "ci_activity"
+  | "subscribed"
+  | "team_mention"
+  | "state_change"
+  | "security_alert"
+  | string;
+
+export interface GitHubNotification {
+  id: string;
+  unread: boolean;
+  reason: NotificationReason;
+  subject: {
+    title: string;
+    type: "PullRequest" | "Issue" | "Release" | "CheckSuite" | string;
+    url: string | null;
+  };
+  repository: string; // "owner/repo"
+  updatedAt: string;
 }
 
 export interface CheckRun {

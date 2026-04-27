@@ -53,6 +53,8 @@ async function main(): Promise<void> {
     watchedAuthorPullRequests: [],
     securityAlerts: [],
     securityAlertTotal: 0,
+    notifications: [],
+    notificationUnreadCount: 0,
     refreshedAt: new Date().toISOString()
   };
 

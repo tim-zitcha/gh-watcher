@@ -1010,6 +1010,8 @@ export async function fetchAllViews(options: {
     watchedAuthorTotalCount: watchedAuthorSearch.totalCount,
     securityAlerts: securityAlerts.alerts,
     securityAlertTotal: securityAlerts.total,
+    notifications: [],
+    notificationUnreadCount: 0,
     refreshedAt: new Date().toISOString()
   };
 }
