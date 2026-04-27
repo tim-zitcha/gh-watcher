@@ -13,9 +13,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -24,13 +21,19 @@ jobs:
 
       - run: npm ci
 
+      - name: Stamp version from tag
+        run: npm version ${GITHUB_REF_NAME#v} --no-git-tag-version
+
       - run: npm run build
 
-      - name: Commit and push built files
+      - name: Pack
+        run: npm pack
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f dist/
-          git diff --cached --quiet && echo "Nothing to commit" && exit 0
-          git commit -m "chore: build ${{ github.ref_name }}"
-          git push origin main
+          gh release create ${{ github.ref_name }} \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            gh-watcher-*.tgz
