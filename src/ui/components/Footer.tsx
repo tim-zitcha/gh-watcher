@@ -3,15 +3,54 @@ import { Box, Text } from "ink";
 import type { AppState } from "../types.js";
 
 export function Footer({ state }: { state: AppState }) {
-  if (state.mode === "security") {
-    return <Box borderStyle="single" borderColor="cyan" paddingX={1}>
-      <Text dimColor>j/k move  Enter open  s sort severity/age  o org  r refresh  S back to PRs  q quit</Text>
-    </Box>;
+  const sep = <Text dimColor> │ </Text>;
+
+  if (state.mode === "messages") {
+    return (
+      <Box borderStyle="single" borderColor="blue" paddingX={1}>
+        <Text dimColor>j/k move</Text>{sep}
+        <Text dimColor>Enter open in browser</Text>{sep}
+        <Text dimColor>a all/unread</Text>{sep}
+        <Text dimColor>1/2/3 mode</Text>{sep}
+        <Text dimColor>r refresh  q quit</Text>
+      </Box>
+    );
   }
-  return <Box borderStyle="single" borderColor="cyan" paddingX={1}>
-    <Text dimColor>{state.detailOpen
-      ? "← → switch panel  j/k prev/next PR  ↑↓ scroll detail  d diff  < > file  o open  Esc close  q quit"
-      : "j/k move  Enter open detail  m mark seen  M mark all  Tab views  / author  o org  r refresh  S security  q quit"
-    }</Text>
-  </Box>;
+
+  if (state.mode === "security") {
+    return (
+      <Box borderStyle="single" borderColor="red" paddingX={1}>
+        <Text dimColor>j/k move</Text>{sep}
+        <Text dimColor>Enter open advisory</Text>{sep}
+        <Text dimColor>s sort severity/age</Text>{sep}
+        <Text dimColor>o org scope</Text>{sep}
+        <Text dimColor>1/2/3 mode</Text>{sep}
+        <Text dimColor>r refresh  q quit</Text>
+      </Box>
+    );
+  }
+
+  if (state.detailOpen) {
+    return (
+      <Box borderStyle="single" borderColor="cyan" paddingX={1}>
+        <Text dimColor>{"← →"} switch panel</Text>{sep}
+        <Text dimColor>j/k prev/next PR</Text>{sep}
+        <Text dimColor>{"↑↓"} scroll detail</Text>{sep}
+        <Text dimColor>d diff  {"< >"} file</Text>{sep}
+        <Text dimColor>o open in browser</Text>{sep}
+        <Text dimColor>Esc close  q quit</Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box borderStyle="single" borderColor="cyan" paddingX={1}>
+      <Text dimColor>j/k move</Text>{sep}
+      <Text dimColor>Enter detail</Text>{sep}
+      <Text dimColor>m mark seen  M mark all</Text>{sep}
+      <Text dimColor>Tab sub-view</Text>{sep}
+      <Text dimColor>1/2/3 mode</Text>{sep}
+      <Text dimColor>{"/ author  o scope  r refresh  q quit"}</Text>
+    </Box>
+  );
 }
