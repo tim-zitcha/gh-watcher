@@ -1,12 +1,14 @@
-# pr-watch
+# gh-watcher
 
-Terminal dashboard for GitHub pull request review queues and watched authors.
+Terminal dashboard for GitHub pull requests and Dependabot security alerts.
+
+Displays your review queue, PRs you've authored, notifications, and security advisories — all in one keyboard-driven TUI. Polls GitHub in the background and sends desktop notifications when things need your attention.
 
 ## Requirements
 
 - Node.js 22+
-- `gh` authenticated against `github.com`
-- macOS notifications are optional and enabled by default
+- `gh` CLI authenticated against `github.com`
+- macOS desktop notifications (optional, enabled by default)
 
 ## Install
 
@@ -15,7 +17,7 @@ npm install
 npm run build
 ```
 
-Run locally with:
+Run locally:
 
 ```bash
 node dist/cli.js
@@ -30,32 +32,53 @@ npm run dev
 ## Usage
 
 ```bash
-node dist/cli.js --refresh-minutes 5
+node dist/cli.js [options]
 ```
 
-Flags:
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--refresh-minutes <n>` | `5` | Polling interval in minutes |
+| `--no-notify` | — | Disable desktop notifications |
+| `--include-drafts` | — | Include draft pull requests |
+| `--watch-user <login>` | authenticated user | Pre-select an authored-by user |
+| `--org <login>` | `zitcha` | Limit searches to an organisation |
+| `--all-repos` | — | Search all repos your token can access |
 
-- `--refresh-minutes <n>`: polling interval in minutes
-- `--no-notify`: disable desktop notifications
-- `--include-drafts`: include draft pull requests
-- `--watch-user <login>`: optionally preselect a different authored-by user
-- `--org <login>`: limit searches to an organization, defaults to `zitcha`
-- `--all-repos`: search all repositories your token can access
+## Views
 
-The authored-by view defaults to the authenticated `gh` user. Press `/` inside the UI to select another author; when an org scope is active, this list is populated from that org's members, with `dependabot[bot]`, recent authors, and a custom username option still available. Press `o` to switch between organizations you can access, or all accessible repositories.
+| Key | View |
+|-----|------|
+| `1` | Review queue — PRs awaiting your review |
+| `2` | Authored — your open PRs |
+| `3` | Notifications — unread GitHub notifications |
 
-The authored-by view shows the 30 most recently updated open PRs for the selected author and scope.
+The **authored** view shows the 30 most recently updated open PRs for the selected author and scope. Press `/` to switch author; when an org is active, the list is drawn from org members with Dependabot and recent contributors included. Press `o` to switch organisation scope or switch to all accessible repositories.
 
-## Keys
+## Keyboard shortcuts
 
-- `Tab`: cycle views
-- `Up` / `Down` or `k` / `j`: move the selected PR
-- `PageUp` / `PageDown`: jump through the PR list faster
-- `Home` / `End`: jump to the first or last PR
-- `/`: select authored-by user
-- `o`: select organization scope
-- `Enter`: open the selected PR in your browser
-- `r`: refresh all views now
-- `m`: mark the selected PR as seen
-- `Shift+m`: mark all visible PRs as seen
-- `q`: quit
+| Key | Action |
+|-----|--------|
+| `1` / `2` / `3` | Switch view |
+| `Tab` | Cycle views |
+| `↑` / `↓` or `k` / `j` | Move selection |
+| `PgUp` / `PgDn` | Jump through list faster |
+| `Home` / `End` | First / last item |
+| `Enter` | Open selected PR or notification in browser |
+| `/` | Select authored-by user |
+| `o` | Select organisation scope |
+| `r` | Refresh all views now |
+| `m` | Mark selected notification as read |
+| `M` | Mark all visible notifications as read |
+| `q` | Quit |
+
+## Development
+
+```bash
+npm run dev          # run with tsx (no build step)
+npm run dev:watch    # watch mode
+npm test             # run tests
+npm run lint         # ESLint
+npm run format       # Prettier
+```
+
+Built with [Ink](https://github.com/vadimdemedes/ink) (React for CLIs), TypeScript, and the `gh` CLI.
