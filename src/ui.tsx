@@ -593,10 +593,352 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     authorCandidates: [],
   }));
 
-  // TODO: keyboard handling, refresh logic, and child components in later tasks
+  const isRefreshingRef = useRef(false);
+  const detailPrRef = useRef<PullRequestSummary | null>(null);
+  const previousAttentionRef = useRef<TrackedAttentionState | null>(null);
+
+  const doRefresh = useCallback(async (target: ViewKey | "all"): Promise<void> => {
+    if (isRefreshingRef.current) {
+      dispatch({ type: "SET_QUEUED_REFRESH", target });
+      return;
+    }
+    isRefreshingRef.current = true;
+    dispatch({ type: "SET_REFRESHING", value: true });
+    dispatch({ type: "SET_STATUS", status: `Refreshing ${target}…` });
+
+    const cfg = options.config;
+    const current = state.attentionState;
+    const viewerLogin = current.viewerLogin;
+    const repositoryScope = current.repositoryScope;
+    const watchedAuthor = current.watchedAuthor;
+
+    try {
+      let next: TrackedAttentionState = { ...current };
+
+      if (target === "myPrs" || target === "all") {
+        const data = await fetchMyPrsData({
+          viewerLogin,
+          includeDrafts: cfg.includeDrafts,
+          repositoryScope,
+        });
+        next = { ...next, myPullRequests: data.myPullRequests, waitingOnOthers: data.waitingOnOthers };
+      }
+      if (target === "needsMyReview" || target === "all") {
+        const data = await fetchNeedsMyReviewData({
+          viewerLogin,
+          includeDrafts: cfg.includeDrafts,
+          repositoryScope,
+        });
+        next = { ...next, needsMyReview: data.needsMyReview };
+      }
+      if ((target === "watchedAuthor" || target === "all") && watchedAuthor) {
+        const data = await fetchPullRequestsAuthoredBy({
+          author: watchedAuthor,
+          includeDrafts: cfg.includeDrafts,
+          repositoryScope,
+        });
+        next = {
+          ...next,
+          watchedAuthorPullRequests: data.pullRequests,
+          watchedAuthorTotal: data.hasMore
+            ? data.pullRequests.length + 1
+            : data.pullRequests.length,
+        };
+      }
+      if (target === "security" || target === "all") {
+        const org = extractOrgFromScope(repositoryScope);
+        if (org) {
+          const data = await fetchDependabotAlerts(org);
+          next = { ...next, securityAlerts: data.alerts, securityAlertTotal: data.total };
+        }
+      }
+
+      next = { ...next, refreshedAt: new Date().toISOString() };
+
+      // Item count for current view
+      const view = PR_VIEWS[state.currentPrViewIndex]!;
+      const itemCount =
+        state.mode === "security"
+          ? next.securityAlerts.length
+          : view === "myPullRequests"
+          ? next.myPullRequests.length
+          : view === "needsMyReview"
+          ? next.needsMyReview.length
+          : view === "waitingOnOthers"
+          ? next.waitingOnOthers.length
+          : next.watchedAuthorPullRequests.length;
+
+      dispatch({ type: "UPDATE_ATTENTION_STATE", state: next, itemCount });
+
+      if (cfg.notificationsEnabled) {
+        const events = buildNotifications(previousAttentionRef.current, next, state.persistedState);
+        if (events.length > 0) void sendNotifications(events);
+      }
+      previousAttentionRef.current = next;
+
+      dispatch({ type: "SET_STATUS", status: `Updated ${formatTimestamp(next.refreshedAt)}` });
+    } catch (err) {
+      dispatch({ type: "SET_STATUS", status: `Error: ${(err as Error).message}` });
+    } finally {
+      isRefreshingRef.current = false;
+      dispatch({ type: "SET_REFRESHING", value: false });
+      const queued = state.queuedRefresh;
+      if (queued) {
+        dispatch({ type: "SET_QUEUED_REFRESH", target: null });
+        void doRefresh(queued);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.config, state.attentionState, state.persistedState, state.currentPrViewIndex, state.mode, state.queuedRefresh]);
+
+  // Initial fetch on mount
+  useEffect(() => {
+    void doRefresh("all");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Poll timer
+  useEffect(() => {
+    const id = setInterval(() => void doRefresh("all"), options.config.refreshMinutes * 60 * 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function openDetail(pr: PullRequestSummary): Promise<void> {
+    detailPrRef.current = pr;
+    dispatch({ type: "OPEN_DETAIL", pr });
+    const [owner, repo] = pr.repository.split("/");
+    try {
+      const result = await fetchPullRequestDetail(owner!, repo!, pr.number);
+      if (detailPrRef.current !== pr) return;
+      dispatch({ type: "SET_DETAIL_DATA", data: result });
+    } catch {
+      if (detailPrRef.current !== pr) return;
+      dispatch({ type: "SET_DETAIL_DATA", data: null });
+    }
+  }
+
+  function getPrsForCurrentView(): PullRequestSummary[] {
+    switch (PR_VIEWS[state.currentPrViewIndex]!) {
+      case "myPullRequests": return state.attentionState.myPullRequests;
+      case "needsMyReview": return state.attentionState.needsMyReview;
+      case "waitingOnOthers": return state.attentionState.waitingOnOthers;
+      case "watchedAuthor": return state.attentionState.watchedAuthorPullRequests;
+      default: return [];
+    }
+  }
+
+  function currentViewKey(): ViewKey {
+    switch (PR_VIEWS[state.currentPrViewIndex]!) {
+      case "myPullRequests": return "myPrs";
+      case "needsMyReview": return "needsMyReview";
+      case "watchedAuthor": return "watchedAuthor";
+      default: return "myPrs";
+    }
+  }
+
+  function moveSelection(offset: number): void {
+    const prs = getPrsForCurrentView();
+    if (prs.length === 0) return;
+    const newIdx = Math.max(0, Math.min(state.selectedRowIndex + offset, prs.length - 1));
+    const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
+    const newScroll = clampScroll(newIdx, state.tableScrollOffset, visibleRows);
+    dispatch({ type: "SET_SELECTED_ROW", index: newIdx, scrollOffset: newScroll });
+    if (state.detailOpen && !state.detailLoading) {
+      const pr = prs[newIdx];
+      if (pr) void openDetail(pr);
+    }
+  }
+
+  function buildScopeOptions(): Array<{ label: string; value: string | null }> {
+    return [
+      { label: "All accessible repos", value: null },
+      ...options.organizations.map((org) => ({ label: `org:${org}`, value: `org:${org}` })),
+    ];
+  }
+
+  function buildAuthorOptions(): WatchedAuthorOption[] {
+    const recent = state.persistedState.watchedAuthors.recent;
+    return [
+      ...COMMON_WATCHED_AUTHORS.filter((a) => !recent.includes(a)).map((a) => ({ label: a, value: a, custom: false })),
+      ...recent.map((a) => ({ label: a, value: a, custom: false })),
+      { label: "Custom...", value: null, custom: true },
+    ];
+  }
+
+  function closeOverlay(): void {
+    dispatch({ type: "SET_OVERLAY", overlay: null });
+  }
+
+  function openScopePicker(): void {
+    dispatch({ type: "SET_OVERLAY", overlay: "scope" });
+  }
+
+  async function openAuthorPicker(): Promise<void> {
+    dispatch({ type: "SET_OVERLAY", overlay: "author" });
+  }
+
+  function applyWatchedAuthor(login: string): void {
+    const newWatched = updateWatchedAuthors(state.persistedState.watchedAuthors, login);
+    const newPersisted: PersistedState = { ...state.persistedState, watchedAuthors: newWatched };
+    dispatch({ type: "SET_PERSISTED_STATE", state: newPersisted });
+    void saveState(options.config.stateFilePath, newPersisted);
+    // Reflect new author in attentionState so doRefresh picks it up
+    dispatch({
+      type: "UPDATE_ATTENTION_STATE",
+      state: { ...state.attentionState, watchedAuthor: login, watchedAuthorPullRequests: [], watchedAuthorTotal: 0 },
+      itemCount: 0,
+    });
+    void doRefresh("watchedAuthor");
+  }
+
+  async function handleAuthorSelect(opt: WatchedAuthorOption): Promise<void> {
+    if (opt.custom) {
+      dispatch({ type: "SET_OVERLAY", overlay: "custom" });
+      return;
+    }
+    closeOverlay();
+    if (opt.value) applyWatchedAuthor(opt.value);
+  }
+
+  async function handleCustomUser(username: string): Promise<void> {
+    closeOverlay();
+    const trimmed = username.trim();
+    if (trimmed) applyWatchedAuthor(trimmed);
+  }
+
+  async function handleScopeSelect(value: string | null): Promise<void> {
+    closeOverlay();
+    dispatch({
+      type: "UPDATE_ATTENTION_STATE",
+      state: { ...state.attentionState, repositoryScope: value },
+      itemCount: 0,
+    });
+    void doRefresh("all");
+  }
+
+  useInput((input, key) => {
+    if (state.activeOverlay) return;
+
+    if (key.upArrow) {
+      if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset - 1 });
+      else moveSelection(-1);
+      return;
+    }
+    if (key.downArrow) {
+      if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset + 1 });
+      else moveSelection(1);
+      return;
+    }
+    if (input === "k") { moveSelection(-1); return; }
+    if (input === "j") { moveSelection(1); return; }
+    if (key.pageUp || (key.ctrl && input === "u")) {
+      if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset - 10 });
+      else moveSelection(-10);
+      return;
+    }
+    if (key.pageDown || (key.ctrl && input === "d")) {
+      if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset + 10 });
+      else moveSelection(10);
+      return;
+    }
+    if (input === "g") {
+      dispatch({ type: "SET_SELECTED_ROW", index: 0, scrollOffset: 0 });
+      return;
+    }
+    if (input === "G") {
+      const n = getPrsForCurrentView().length - 1;
+      const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
+      dispatch({ type: "SET_SELECTED_ROW", index: Math.max(0, n), scrollOffset: Math.max(0, n - (visibleRows - 1)) });
+      return;
+    }
+
+    if (key.return) {
+      if (state.mode === "security") {
+        const alert = sortSecurityAlerts(state.attentionState.securityAlerts, state.securitySortMode)[state.selectedRowIndex];
+        if (alert) void open(alert.url);
+        return;
+      }
+      const pr = getPrsForCurrentView()[state.selectedRowIndex];
+      if (pr) void openDetail(pr);
+      return;
+    }
+    if (key.escape) {
+      if (state.detailOpen) dispatch({ type: "CLOSE_DETAIL" });
+      return;
+    }
+    if (key.tab && state.mode === "pr") {
+      const next = (state.currentPrViewIndex + 1) % PR_VIEWS.length;
+      dispatch({ type: "SET_VIEW_INDEX", index: next });
+      return;
+    }
+    if (input === "S") {
+      dispatch({ type: "SET_MODE", mode: state.mode === "security" ? "pr" : "security" });
+      return;
+    }
+    if (input === "s" && state.mode === "security") {
+      dispatch({ type: "SET_SECURITY_SORT", sort: state.securitySortMode === "severity" ? "age" : "severity" });
+      return;
+    }
+    if (input === "/") { void openAuthorPicker(); return; }
+    if (input === "o") {
+      if (state.detailOpen) {
+        const pr = state.detailPr;
+        if (pr) void open(pr.url);
+      } else {
+        openScopePicker();
+      }
+      return;
+    }
+    if (input === "r") { void doRefresh(currentViewKey()); return; }
+    if (input === "m" && state.mode === "pr") {
+      const pr = getPrsForCurrentView()[state.selectedRowIndex];
+      if (pr) {
+        const newState = markSeen(state.persistedState, [pr]);
+        dispatch({ type: "SET_PERSISTED_STATE", state: newState });
+        void saveState(options.config.stateFilePath, newState);
+      }
+      return;
+    }
+    if (input === "M" && state.mode === "pr") {
+      const prs = getPrsForCurrentView();
+      const newState = markSeen(state.persistedState, prs);
+      dispatch({ type: "SET_PERSISTED_STATE", state: newState });
+      void saveState(options.config.stateFilePath, newState);
+      return;
+    }
+    if (input === "q" || (key.ctrl && input === "c")) { exit(); return; }
+  });
+
+  const showOverlay = state.activeOverlay !== null;
+
   return (
     <Box flexDirection="column" height={stdout?.rows ?? 24}>
-      <Text>gh-watcher loading...</Text>
+      <Header state={state} />
+      {showOverlay ? (
+        <Box flexGrow={1} flexDirection="column" paddingX={2} paddingY={1}>
+          {state.activeOverlay === "author" && (
+            <AuthorPicker options={buildAuthorOptions()} onSelect={handleAuthorSelect} onCancel={closeOverlay} />
+          )}
+          {state.activeOverlay === "scope" && (
+            <ScopePicker options={buildScopeOptions()} onSelect={handleScopeSelect} onCancel={closeOverlay} />
+          )}
+          {state.activeOverlay === "custom" && (
+            <CustomUserInput
+              initial={state.attentionState.watchedAuthor ?? state.attentionState.viewerLogin}
+              onSubmit={handleCustomUser}
+              onCancel={closeOverlay}
+            />
+          )}
+        </Box>
+      ) : (
+        <Box flexDirection="row" flexGrow={1}>
+          {state.mode === "pr" && <PrList state={state} narrow={state.detailOpen} />}
+          {state.mode === "security" && <SecurityList state={state} />}
+          {state.detailOpen && <PrDetail state={state} />}
+        </Box>
+      )}
+      <Footer state={state} />
     </Box>
   );
 }
