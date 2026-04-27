@@ -347,12 +347,10 @@ function Dashboard({ options }: { options: DashboardOptions }) {
 
   function buildAuthorOptions(): WatchedAuthorOption[] {
     const recent = state.persistedState.watchedAuthors.recent;
-    const orgPrefixed = options.organizations.map((org) => `org:${org}`);
-    const seen = new Set([...COMMON_WATCHED_AUTHORS, ...recent, ...orgPrefixed]);
+    const seen = new Set([...COMMON_WATCHED_AUTHORS, ...recent]);
     return [
-      ...orgPrefixed.map((o) => ({ label: o, value: o, custom: false })),
       ...COMMON_WATCHED_AUTHORS.filter((a) => !seen.has(a)).map((a) => ({ label: a, value: a, custom: false })),
-      ...recent.filter((a) => !orgPrefixed.includes(a)).map((a) => ({ label: a, value: a, custom: false })),
+      ...recent.map((a) => ({ label: a, value: a, custom: false })),
       { label: "Custom...", value: null, custom: true },
     ];
   }
