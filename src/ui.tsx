@@ -897,7 +897,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       }
       return;
     }
-    if (input === "r") { void doRefresh(currentViewKey()); return; }
+    if (input === "r") { void doRefresh(modeRef.current === "security" ? "security" : currentViewKey()); return; }
     if (input === "m" && state.mode === "pr") {
       const pr = getPrsForCurrentView()[state.selectedRowIndex];
       if (pr) {
