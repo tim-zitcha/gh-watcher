@@ -7,7 +7,7 @@ import open from "open";
 import { buildNotifications } from "./domain.js";
 import {
   extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData,
-  fetchNeedsMyReviewData, fetchOrganizationMembers, fetchPullRequestDetail,
+  fetchNeedsMyReviewData, fetchPullRequestDetail,
   fetchPullRequestsAuthoredBy
 } from "./github.js";
 import { sendNotifications } from "./notify.js";
@@ -123,8 +123,6 @@ interface AppState {
   detailData: PullRequestDetail | null;
   detailLoading: boolean;
   detailScrollOffset: number;
-  orgMembers: Map<string, string[]>;
-  authorCandidates: string[];
 }
 
 type Action =
@@ -145,9 +143,7 @@ type Action =
   | { type: "OPEN_DETAIL"; pr: PullRequestSummary }
   | { type: "SET_DETAIL_DATA"; data: PullRequestDetail | null }
   | { type: "SET_DETAIL_SCROLL"; offset: number }
-  | { type: "CLOSE_DETAIL" }
-  | { type: "SET_ORG_MEMBERS"; org: string; members: string[] }
-  | { type: "SET_AUTHOR_CANDIDATES"; candidates: string[] };
+  | { type: "CLOSE_DETAIL" };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -193,12 +189,6 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, detailScrollOffset: Math.max(0, action.offset) };
     case "CLOSE_DETAIL":
       return { ...state, detailOpen: false, detailPr: null, detailData: null, detailLoading: false, detailScrollOffset: 0 };
-    case "SET_ORG_MEMBERS": {
-      const m = new Map(state.orgMembers); m.set(action.org, action.members);
-      return { ...state, orgMembers: m };
-    }
-    case "SET_AUTHOR_CANDIDATES":
-      return { ...state, authorCandidates: action.candidates };
     default: return state;
   }
 }
@@ -589,16 +579,32 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     detailData: null,
     detailLoading: false,
     detailScrollOffset: 0,
-    orgMembers: new Map<string, string[]>(),
-    authorCandidates: [],
   }));
 
   const isRefreshingRef = useRef(false);
   const detailPrRef = useRef<PullRequestSummary | null>(null);
-  const previousAttentionRef = useRef<TrackedAttentionState | null>(null);
+  const previousAttentionRef = useRef<TrackedAttentionState>(options.initialAttentionState);
+
+  // Live-value refs read inside doRefresh so the timer-driven callback never
+  // becomes stale. Updated every render by the effect below.
+  const attentionStateRef = useRef(state.attentionState);
+  const persistedStateRef = useRef(state.persistedState);
+  const securitySortModeRef = useRef(state.securitySortMode);
+  const currentPrViewIndexRef = useRef(state.currentPrViewIndex);
+  const modeRef = useRef(state.mode);
+  const queuedRefreshRef = useRef<ViewKey | "all" | null>(null);
+
+  useEffect(() => {
+    attentionStateRef.current = state.attentionState;
+    persistedStateRef.current = state.persistedState;
+    securitySortModeRef.current = state.securitySortMode;
+    currentPrViewIndexRef.current = state.currentPrViewIndex;
+    modeRef.current = state.mode;
+  });
 
   const doRefresh = useCallback(async (target: ViewKey | "all"): Promise<void> => {
     if (isRefreshingRef.current) {
+      queuedRefreshRef.current = target;
       dispatch({ type: "SET_QUEUED_REFRESH", target });
       return;
     }
@@ -607,7 +613,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     dispatch({ type: "SET_STATUS", status: `Refreshing ${target}…` });
 
     const cfg = options.config;
-    const current = state.attentionState;
+    const current = attentionStateRef.current;
     const viewerLogin = current.viewerLogin;
     const repositoryScope = current.repositoryScope;
     const watchedAuthor = current.watchedAuthor;
@@ -656,9 +662,9 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       next = { ...next, refreshedAt: new Date().toISOString() };
 
       // Item count for current view
-      const view = PR_VIEWS[state.currentPrViewIndex]!;
+      const view = PR_VIEWS[currentPrViewIndexRef.current]!;
       const itemCount =
-        state.mode === "security"
+        modeRef.current === "security"
           ? next.securityAlerts.length
           : view === "myPullRequests"
           ? next.myPullRequests.length
@@ -671,7 +677,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       dispatch({ type: "UPDATE_ATTENTION_STATE", state: next, itemCount });
 
       if (cfg.notificationsEnabled) {
-        const events = buildNotifications(previousAttentionRef.current, next, state.persistedState);
+        const events = buildNotifications(previousAttentionRef.current, next, persistedStateRef.current);
         if (events.length > 0) void sendNotifications(events);
       }
       previousAttentionRef.current = next;
@@ -682,14 +688,15 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     } finally {
       isRefreshingRef.current = false;
       dispatch({ type: "SET_REFRESHING", value: false });
-      const queued = state.queuedRefresh;
+      const queued = queuedRefreshRef.current;
       if (queued) {
+        queuedRefreshRef.current = null;
         dispatch({ type: "SET_QUEUED_REFRESH", target: null });
         void doRefresh(queued);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.config, state.attentionState, state.persistedState, state.currentPrViewIndex, state.mode, state.queuedRefresh]);
+  }, []);
 
   // Initial fetch on mount
   useEffect(() => {
