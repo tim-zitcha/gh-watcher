@@ -426,6 +426,91 @@ function SecurityList({ state }: { state: AppState }) {
   );
 }
 
+// ── PrDetail ──────────────────────────────────────────────────────────────────
+
+function PrDetail({ state }: { state: AppState }) {
+  const { stdout } = useStdout();
+  const rows = stdout?.rows ?? 24;
+  const { detailPr: pr, detailData, detailLoading, detailScrollOffset } = state;
+  if (!pr) return null;
+
+  const visibleLines = rows - 9;
+  const openedLabel = formatTimestamp(detailData?.createdAt ?? pr.activity.latestActivityAt);
+
+  type Line = { text: string; color?: string; bold?: boolean; dimColor?: boolean };
+  const lines: Line[] = [
+    { text: `#${pr.number} — ${pr.title}`, bold: true },
+    { text: `${pr.repository} · ${pr.author} · opened ${openedLabel}`, dimColor: true },
+    { text: "" },
+  ];
+
+  if (detailLoading) {
+    lines.push({ text: "Loading...", color: "yellow" });
+  } else if (detailData) {
+    const d = detailData;
+
+    lines.push({ text: "── Description ─────────────────────────────", dimColor: true });
+    for (const line of (htmlToText(d.body) || "(no description)").split("\n"))
+      lines.push({ text: line });
+    lines.push({ text: "" });
+
+    const passing = d.checkRuns.filter(c => c.conclusion === "SUCCESS").length;
+    const failing = d.checkRuns.filter(c => c.conclusion !== null && c.conclusion !== "SUCCESS" && c.conclusion !== "NEUTRAL" && c.conclusion !== "SKIPPED").length;
+    lines.push({ text: `── CI Checks (${passing} passing / ${failing} failing) ──`, dimColor: true });
+    for (const check of d.checkRuns) {
+      lines.push({
+        text: `${check.conclusion === "SUCCESS" ? "✓" : check.conclusion === null ? "●" : "✗"} ${check.name}`,
+        color: check.conclusion === "SUCCESS" ? "green" : check.conclusion === null ? "yellow" : "red",
+      });
+    }
+    lines.push({ text: "" });
+
+    lines.push({ text: "── Reviews ──────────────────────────────────", dimColor: true });
+    const reviewedAuthors = new Set(d.reviews.map(r => r.author));
+    for (const review of d.reviews) {
+      lines.push({
+        text: `${review.state === "APPROVED" ? "✓" : review.state === "CHANGES_REQUESTED" ? "✗" : "·"} ${review.author} — ${review.state}`,
+        color: review.state === "APPROVED" ? "green" : review.state === "CHANGES_REQUESTED" ? "red" : undefined,
+      });
+    }
+    for (const reviewer of d.requestedReviewers) {
+      if (!reviewedAuthors.has(reviewer))
+        lines.push({ text: `⏳ ${reviewer} — PENDING`, color: "yellow" });
+    }
+    lines.push({ text: "" });
+
+    const totalAdd = d.files.reduce((s, f) => s + f.additions, 0);
+    const totalDel = d.files.reduce((s, f) => s + f.deletions, 0);
+    lines.push({ text: `── Files Changed (${d.files.length} files, +${totalAdd} −${totalDel}) ──`, dimColor: true });
+    for (const file of d.files)
+      lines.push({ text: `${file.path}   +${file.additions} −${file.deletions}` });
+  }
+
+  const maxOffset = Math.max(0, lines.length - visibleLines);
+  const offset = Math.min(detailScrollOffset, maxOffset);
+  const visible = lines.slice(offset, offset + visibleLines);
+  while (visible.length < visibleLines) visible.push({ text: "" });
+
+  const needsScrollbar = lines.length > visibleLines;
+  const thumbSize = needsScrollbar ? Math.max(1, Math.round(visibleLines * visibleLines / lines.length)) : 0;
+  const thumbStart = needsScrollbar ? Math.round((offset / Math.max(1, maxOffset)) * (visibleLines - thumbSize)) : 0;
+
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="yellow" width="62%" flexShrink={0}>
+      {visible.map((line, i) => (
+        <Box key={i} justifyContent="space-between">
+          <Text bold={line.bold} color={line.color} dimColor={line.dimColor}>{line.text || " "}</Text>
+          {needsScrollbar && (
+            <Text color={i >= thumbStart && i < thumbStart + thumbSize ? "yellow" : "gray"}>
+              {i >= thumbStart && i < thumbStart + thumbSize ? "│" : "·"}
+            </Text>
+          )}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function runDashboard(options: DashboardOptions): Promise<void> {
