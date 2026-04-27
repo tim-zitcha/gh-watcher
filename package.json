@@ -1,6 +1,6 @@
 {
   "name": "gh-watcher",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Terminal dashboard for GitHub pull requests and Dependabot security alerts.",
   "type": "module",
   "bin": {
