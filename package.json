@@ -11,12 +11,15 @@
     "dev": "tsx src/cli.ts",
     "dev:watch": "tsx watch src/cli.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint src test",
+    "format": "prettier --write src test"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
+    "he": "^1.2.0",
     "ink": "^7.0.1",
     "ink-select-input": "^6.2.0",
     "ink-text-input": "^6.0.0",
@@ -25,8 +28,14 @@
     "react": "^19.2.5"
   },
   "devDependencies": {
+    "@types/he": "^1.2.3",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.14",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.8.3",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^4.0.7"

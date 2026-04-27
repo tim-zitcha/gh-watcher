@@ -36,7 +36,6 @@ function createTrackedState(overrides: Partial<TrackedAttentionState> = {}): Tra
     needsMyReview: [],
     waitingOnOthers: [],
     watchedAuthorPullRequests: [],
-    watchedAuthorTotal: 0,
     securityAlerts: [],
     securityAlertTotal: 0,
     refreshedAt: "2026-04-24T00:00:00Z",

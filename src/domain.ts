@@ -87,6 +87,9 @@ export function buildNotifications(
     const previousFingerprint = previousWaitingFingerprints.get(pullRequest.id);
     const recordedFingerprint = persistedState.notificationFingerprintByKey[dedupeKey];
 
+    // Four-way guard: PR existed before (not brand new), activity changed since last
+    // seen refresh, we haven't already notified for this exact fingerprint, and the
+    // user hasn't manually marked it read — all four must hold to avoid double-firing.
     if (
       previousFingerprint &&
       previousFingerprint !== pullRequest.activity.fingerprint &&
