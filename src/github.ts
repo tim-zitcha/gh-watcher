@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-import type { ActivitySnapshot, AlertSeverity, ChangedFile, CheckRun, CheckCounts, CiStatus, PullRequestDetail, PullRequestSummary, ReviewSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
+import type { ActivitySnapshot, AlertSeverity, ChangedFile, CheckRun, CheckCounts, CiStatus, GitHubNotification, NotificationReason, PullRequestDetail, PullRequestSummary, ReviewSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
 import { isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
 
 const SEARCH_PAGE_SIZE = 30; // GitHub recommends ≤30 for search; larger pages hit timeout limits
@@ -1042,4 +1042,31 @@ export async function fetchPullRequestDiff(
       resolve(stdout);
     });
   });
+}
+
+export async function fetchNotifications(): Promise<GitHubNotification[]> {
+  const payload = await runGhRest(
+    "/notifications?all=false&per_page=50"
+  );
+
+  type RawSubject = { title: string; type: string; url: string | null };
+  type RawNotification = {
+    id: string;
+    unread: boolean;
+    reason: string;
+    subject: RawSubject;
+    repository: { full_name: string };
+    updated_at: string;
+  };
+
+  const raw = JSON.parse(payload) as RawNotification[];
+
+  return raw.map((n) => ({
+    id: n.id,
+    unread: n.unread,
+    reason: n.reason as NotificationReason,
+    subject: { title: n.subject.title, type: n.subject.type, url: n.subject.url },
+    repository: n.repository.full_name,
+    updatedAt: n.updated_at,
+  }));
 }
