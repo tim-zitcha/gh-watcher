@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/tim-zitcha/gh-watcher/compare/v1.0.0...v1.1.0) (2026-04-27)
+
+
+### Features
+
+* browser shortcut, draft toggle, view scroll persistence, TTL cache, mark-seen fingerprint fix ([99e1ae8](https://github.com/tim-zitcha/gh-watcher/commit/99e1ae87a04ed320995c13c5c1e6dcbcc6437fe3))
+
 ## 1.0.0 (2026-04-27)
 
 
