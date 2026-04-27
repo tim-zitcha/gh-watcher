@@ -511,6 +511,53 @@ function PrDetail({ state }: { state: AppState }) {
   );
 }
 
+// ── Overlay components ────────────────────────────────────────────────────────
+
+function AuthorPicker({ options, onSelect, onCancel }: {
+  options: WatchedAuthorOption[];
+  onSelect: (opt: WatchedAuthorOption) => void;
+  onCancel: () => void;
+}) {
+  useInput((_, key) => { if (key.escape) onCancel(); });
+  const items = options.map(o => ({ label: o.label, value: o }));
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
+      <Text bold> Select Author </Text>
+      <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
+    </Box>
+  );
+}
+
+function ScopePicker({ options, onSelect, onCancel }: {
+  options: Array<{ label: string; value: string | null }>;
+  onSelect: (value: string | null) => void;
+  onCancel: () => void;
+}) {
+  useInput((_, key) => { if (key.escape) onCancel(); });
+  const items = options.map(o => ({ label: o.label, value: o.value }));
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
+      <Text bold> Select Scope </Text>
+      <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
+    </Box>
+  );
+}
+
+function CustomUserInput({ initial, onSubmit, onCancel }: {
+  initial: string;
+  onSubmit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = React.useState(initial);
+  useInput((_, key) => { if (key.escape) onCancel(); });
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1} width={50}>
+      <Text bold> Custom Author </Text>
+      <TextInput focus value={value} onChange={setValue} onSubmit={(v) => onSubmit(v.trim() || initial)} />
+    </Box>
+  );
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function runDashboard(options: DashboardOptions): Promise<void> {
