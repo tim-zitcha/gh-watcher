@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useReducer, useRef } from "react";
 import { Box, render, useApp, useInput, useStdout } from "ink";
 import open from "open";
 
-import { buildNotifications, sortPullRequests } from "../domain.js";
+import { buildNotifications } from "../domain.js";
 import {
   extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData,
   fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff,
   fetchPullRequestsAuthoredBy, markNotificationRead, markAllNotificationsRead,
 } from "../github.js";
 import { sendNotifications } from "../notify.js";
-import { isUnread, markSeen, saveState, updateWatchedAuthors } from "../state.js";
+import { markSeen, saveState, updateWatchedAuthors } from "../state.js";
 import type { PersistedState, PullRequestSummary, TrackedAttentionState } from "../types.js";
 import { PR_VIEWS, COMMON_WATCHED_AUTHORS, clampScroll, formatTimestamp, parseDiff, sortSecurityAlerts } from "./helpers.js";
 import { reducer } from "./reducer.js";
@@ -624,7 +624,6 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       return;
     }
     if (input === "<" && state.detailOpen && state.detailDiffVisible && state.detailDiff) {
-      const files = parseDiff(state.detailDiff);
       const next = Math.max(0, state.detailDiffFileIndex - 1);
       dispatch({ type: "SET_DIFF_FILE_INDEX", index: next });
       return;
