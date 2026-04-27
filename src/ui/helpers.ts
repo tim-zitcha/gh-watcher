@@ -1,0 +1,106 @@
+import he from "he";
+import type { AlertSeverity, DiffFile, DiffLine, PullRequestSummary, SecurityAlert, SecuritySortMode } from "../types.js";
+
+export const PR_VIEWS = ["myPullRequests", "needsMyReview", "waitingOnOthers", "watchedAuthor"] as const;
+export const SEVERITY_RANK: Record<AlertSeverity, number> = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
+export const COMMON_WATCHED_AUTHORS = ["dependabot[bot]"];
+
+export function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+export function htmlToText(html: string): string {
+  const stripped = html
+    .replace(/\r/g, "")
+    .replace(/<details[^>]*>/gi, "").replace(/<\/details>/gi, "")
+    .replace(/<summary[^>]*>(.*?)<\/summary>/gis, "[$1]")
+    .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gis, "\n## $1\n")
+    .replace(/<li[^>]*>/gi, "\n  - ").replace(/<\/li>/gi, "")
+    .replace(/<ul[^>]*>|<\/ul>|<ol[^>]*>|<\/ol>/gi, "")
+    .replace(/<p[^>]*>/gi, "\n").replace(/<\/p>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<strong[^>]*>(.*?)<\/strong>/gis, "*$1*")
+    .replace(/<em[^>]*>(.*?)<\/em>/gis, "_$1_")
+    .replace(/<code[^>]*>(.*?)<\/code>/gis, "`$1`")
+    .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gis, "$2 ($1)")
+    .replace(/<blockquote[^>]*>/gi, "\n> ").replace(/<\/blockquote>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return he.decode(stripped);
+}
+
+export function formatCiStatus(pr: PullRequestSummary): { symbol: string; color: string } {
+  const { passing, failing, pending } = pr.checkCounts;
+  const total = passing + failing + pending;
+  if (total === 0) {
+    switch (pr.ciStatus) {
+      case "SUCCESS": return { symbol: "✓", color: "green" };
+      case "FAILURE": case "ERROR": return { symbol: "✗", color: "red" };
+      case "PENDING": case "EXPECTED": return { symbol: "●", color: "yellow" };
+      default: return { symbol: "-", color: "gray" };
+    }
+  }
+  const parts: string[] = [];
+  if (passing > 0) parts.push(`✓${passing}`);
+  if (failing > 0) parts.push(`✗${failing}`);
+  if (pending > 0) parts.push(`●${pending}`);
+  return { symbol: parts.join(" "), color: failing > 0 ? "red" : pending > 0 ? "yellow" : "green" };
+}
+
+export function sortSecurityAlerts(alerts: SecurityAlert[], mode: SecuritySortMode): SecurityAlert[] {
+  return [...alerts].sort((a, b) => {
+    if (mode === "severity") {
+      const diff = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+      if (diff !== 0) return diff;
+    }
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+}
+
+export function clampScroll(selectedRow: number, currentOffset: number, visibleRows: number): number {
+  if (selectedRow < currentOffset) return selectedRow;
+  if (selectedRow >= currentOffset + visibleRows) return selectedRow - visibleRows + 1;
+  return currentOffset;
+}
+
+export function pad(s: string, w: number): string {
+  if (s.length > w) return s.slice(0, Math.max(w - 3, 0)) + "...";
+  return s.padEnd(w);
+}
+
+export function parseDiff(raw: string): DiffFile[] {
+  if (!raw.trim()) return [];
+
+  const files: DiffFile[] = [];
+  let current: DiffFile | null = null;
+
+  for (const text of raw.split("\n")) {
+    if (text.startsWith("diff --git ")) {
+      const match = text.match(/diff --git a\/.+ b\/(.+)/);
+      const header = match?.[1] ?? text;
+      current = { header, lines: [] };
+      files.push(current);
+    }
+    if (!current) continue;
+
+    let type: DiffLine["type"];
+    if (text.startsWith("diff ") || text.startsWith("--- ") || text.startsWith("+++ ")) {
+      type = "file";
+    } else if (text.startsWith("@@")) {
+      type = "hunk";
+    } else if (text.startsWith("+")) {
+      type = "add";
+    } else if (text.startsWith("-")) {
+      type = "del";
+    } else {
+      type = "ctx";
+    }
+
+    current.lines.push({ type, text });
+  }
+
+  return files;
+}
