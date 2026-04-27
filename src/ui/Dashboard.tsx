@@ -184,6 +184,21 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       previousAttentionRef.current = next;
 
       dispatch({ type: "SET_STATUS", status: `Updated ${formatTimestamp(next.refreshedAt)}` });
+
+      // Silently re-fetch open PR detail so it reflects any new CI/review state
+      const openPr = detailPrRef.current;
+      if (openPr) {
+        const [owner, repo] = openPr.repository.split("/");
+        void Promise.all([
+          fetchPullRequestDetail(owner!, repo!, openPr.number),
+          fetchPullRequestDiff(owner!, repo!, openPr.number).catch(() => null),
+        ]).then(([data, diff]) => {
+          // Only apply if the same PR is still open
+          if (detailPrRef.current !== openPr) return;
+          dispatch({ type: "SET_DETAIL_DATA", data });
+          dispatch({ type: "SET_DETAIL_DIFF", diff });
+        }).catch(() => { /* detail refresh failure is silent */ });
+      }
     } catch (err) {
       if (refreshGenerationRef.current !== generation) return;
       dispatch({ type: "SET_STATUS", status: `Error: ${err instanceof Error ? err.message : String(err)}` });
