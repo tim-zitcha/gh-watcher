@@ -5,7 +5,7 @@ import open from "open";
 import { buildNotifications, sortPullRequests } from "../domain.js";
 import {
   extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData,
-  fetchNeedsMyReviewData, fetchPullRequestDetail, fetchPullRequestDiff,
+  fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff,
   fetchPullRequestsAuthoredBy
 } from "../github.js";
 import { sendNotifications } from "../notify.js";
@@ -20,6 +20,7 @@ import { Overlays } from "./components/Overlays.js";
 import { PrDetail } from "./components/PrDetail.js";
 import { PrList } from "./components/PrList.js";
 import { SecurityList } from "./components/SecurityList.js";
+import { MessagesList } from "./components/MessagesList.js";
 
 export { DashboardOptions };
 
@@ -163,12 +164,24 @@ function Dashboard({ options }: { options: DashboardOptions }) {
         }
       }
 
+      if (target === "messages" || target === "all") {
+        try {
+          const notifications = await fetchNotifications();
+          const unreadCount = notifications.filter(n => n.unread).length;
+          next = { ...next, notifications, notificationUnreadCount: unreadCount };
+        } catch {
+          // notifications fetch failure is non-fatal
+        }
+      }
+
       next = { ...next, refreshedAt: new Date().toISOString() };
 
       const view = PR_VIEWS[currentPrViewIndexRef.current]!;
       const itemCount =
         modeRef.current === "security"
           ? next.securityAlerts.length
+          : modeRef.current === "messages"
+          ? next.notifications.length
           : view === "myPullRequests"
           ? next.myPullRequests.length
           : view === "needsMyReview"
@@ -336,6 +349,16 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       dispatch({ type: "SET_SELECTED_ROW", index: newIdx, scrollOffset: newScroll });
       return;
     }
+    if (state.mode === "messages") {
+      const items = state.messagesShowAll
+        ? state.attentionState.notifications
+        : state.attentionState.notifications.filter(n => n.unread);
+      if (items.length === 0) return;
+      const newIdx = Math.max(0, Math.min(state.selectedRowIndex + offset, items.length - 1));
+      const newScroll = clampScroll(newIdx, state.tableScrollOffset, visibleRows);
+      dispatch({ type: "SET_SELECTED_ROW", index: newIdx, scrollOffset: newScroll });
+      return;
+    }
     const prs = getPrsForCurrentView();
     if (prs.length === 0) return;
     const newIdx = Math.max(0, Math.min(state.selectedRowIndex + offset, prs.length - 1));
@@ -494,6 +517,22 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     }
 
     if (key.return) {
+      if (state.mode === "messages") {
+        const items = state.messagesShowAll
+          ? state.attentionState.notifications
+          : state.attentionState.notifications.filter(n => n.unread);
+        const n = items[state.selectedRowIndex];
+        if (n?.subject.url) {
+          // Convert GitHub API URL to web URL.
+          // API:  https://api.github.com/repos/owner/repo/pulls/123
+          // Web:  https://github.com/owner/repo/pull/123
+          const webUrl = n.subject.url
+            .replace("https://api.github.com/repos/", "https://github.com/")
+            .replace(/\/pulls\/(\d+)$/, "/pull/$1");
+          void open(webUrl);
+        }
+        return;
+      }
       if (state.mode === "security") {
         const alert = sortSecurityAlerts(state.attentionState.securityAlerts, state.securitySortMode)[state.selectedRowIndex];
         if (alert) void open(alert.url);
@@ -513,8 +552,20 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       dispatch({ type: "SET_VIEW_INDEX", index: next });
       return;
     }
-    if (input === "S") {
-      dispatch({ type: "SET_MODE", mode: state.mode === "security" ? "pr" : "security" });
+    if (input === "1") {
+      dispatch({ type: "SET_MODE", mode: "pr" });
+      return;
+    }
+    if (input === "2") {
+      dispatch({ type: "SET_MODE", mode: "security" });
+      return;
+    }
+    if (input === "3") {
+      dispatch({ type: "SET_MODE", mode: "messages" });
+      return;
+    }
+    if (input === "a" && state.mode === "messages") {
+      dispatch({ type: "SET_MESSAGES_SHOW_ALL", value: !state.messagesShowAll });
       return;
     }
     if (input === "s" && state.mode === "security") {
@@ -531,7 +582,11 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       }
       return;
     }
-    if (input === "r") { void doRefresh(modeRef.current === "security" ? "security" : currentViewKey()); return; }
+    if (input === "r") {
+      const target = modeRef.current === "security" ? "security" : modeRef.current === "messages" ? "messages" : currentViewKey();
+      void doRefresh(target);
+      return;
+    }
     if (input === "m" && state.mode === "pr") {
       const pr = getPrsForCurrentView()[state.selectedRowIndex];
       if (pr) {
@@ -588,6 +643,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
         <Box flexDirection="row" flexGrow={1}>
           {state.mode === "pr" && <PrList state={state} narrow={state.detailOpen} />}
           {state.mode === "security" && <SecurityList state={state} hasOrgs={options.organizations.length > 0} />}
+          {state.mode === "messages" && <MessagesList state={state} />}
           {state.detailOpen && <PrDetail state={state} />}
         </Box>
       )}
