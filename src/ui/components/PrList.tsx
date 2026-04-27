@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
 import { isUnread } from "../../state.js";
-import { PR_VIEWS, clampScroll, formatCiStatus, formatTimestamp, pad } from "../helpers.js";
+import { PR_VIEWS, clampScroll, formatCiStatus, formatAge, formatReviewStatus, pad } from "../helpers.js";
 import type { AppState } from "../types.js";
 
 export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) {
@@ -12,6 +12,7 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
 
   const view = PR_VIEWS[state.currentPrViewIndex]!;
   const { attentionState, isRefreshing, isLoadingMore } = state;
+
   const pullRequests = (() => {
     switch (view) {
       case "myPullRequests": return attentionState.myPullRequests;
@@ -21,6 +22,7 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
       default: return [];
     }
   })();
+
   const totalCount = (() => {
     switch (view) {
       case "myPullRequests": return attentionState.myPullRequestsTotalCount;
@@ -35,59 +37,82 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
   const visible = pullRequests.slice(scrollOffset, scrollOffset + visibleRows);
 
   const showingLabel = pullRequests.length === 0
-    ? isRefreshing ? "Loading..." : "No results"
+    ? (isRefreshing ? "Loading…" : "No results")
     : totalCount != null
-      ? `Showing ${scrollOffset + 1}–${scrollOffset + visible.length} of ${pullRequests.length} loaded (${totalCount} total)`
-      : `Showing ${scrollOffset + 1}–${scrollOffset + visible.length} of ${pullRequests.length}`;
+      ? `${scrollOffset + 1}–${scrollOffset + visible.length} of ${pullRequests.length} loaded (${totalCount} total)`
+      : `${scrollOffset + 1}–${scrollOffset + visible.length} of ${pullRequests.length}`;
+
+  const focusColor = !state.detailOpen || state.focusedPanel === "list" ? "cyan" : "gray";
 
   if (narrow) {
-    const availWidth = Math.floor(cols * 0.38) - 4;
-    const prCol = 6; const ciCol = 5;
-    const titleWidth = Math.max(8, availWidth - prCol - ciCol - 2);
+    const panelWidth = Math.floor(cols * 0.38);
+    const titleWidth = Math.max(8, panelWidth - 2 - 3 - 3 - 4);
     return (
-      <Box flexDirection="column" borderStyle="single" borderColor={!state.detailOpen || state.focusedPanel === "list" ? "cyan" : "gray"} width="38%">
-        <Text bold>{pad("PR", prCol)} {pad("CI", ciCol)} {pad("Title", titleWidth)}</Text>
+      <Box flexDirection="column" borderStyle="single" borderColor={focusColor} width="38%">
+        <Text dimColor>{pad("·", 2)} {pad("CI", 2)} {pad("R", 2)} {pad("Title", titleWidth)}</Text>
         <Text dimColor>{showingLabel}</Text>
         {visible.map((pr, i) => {
-          const ci = formatCiStatus(pr);
           const selected = scrollOffset + i === selectedRowIndex;
+          const unread = isUnread(state.persistedState, pr);
+          const ci = formatCiStatus(pr);
+          const rev = formatReviewStatus(pr);
           return (
-            <Text key={pr.id} inverse={selected}>
-              {pad(`#${pr.number}`, prCol)}{" "}
-              <Text color={ci.color}>{pad(ci.symbol, ciCol)}</Text>
+            <Text key={pr.id} inverse={selected} dimColor={!unread && !selected}>
+              <Text color={unread ? "yellow" : "gray"}>{unread ? "●" : "·"}</Text>
+              {" "}
+              <Text color={ci.color}>{pad(ci.symbol, 2)}</Text>
+              {" "}
+              <Text color={rev.color}>{pad(rev.symbol, 2)}</Text>
+              {" "}
               {pad(pr.title, titleWidth)}
             </Text>
           );
         })}
-        {isLoadingMore && <Text color="yellow" dimColor>  Loading more...</Text>}
+        {isLoadingMore && <Text color="yellow" dimColor>  ● Loading more…</Text>}
       </Box>
     );
   }
 
-  const availWidth = cols - 4;
-  const fixedCols = { state: 5, repo: 26, pr: 6, author: 14, ci: 10, reviewers: 22, activity: 14 };
-  const fixedTotal = Object.values(fixedCols).reduce((a, b) => a + b, 0) + 7;
-  const titleWidth = Math.max(20, availWidth - fixedTotal);
+  const unreadCol = 2;
+  const ciCol = 3;
+  const revCol = 3;
+  const repoCol = 24;
+  const authorCol = 14;
+  const ageCol = 6;
+  const fixedTotal = unreadCol + ciCol + revCol + repoCol + authorCol + ageCol + 7;
+  const titleWidth = Math.max(20, cols - 4 - fixedTotal);
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor={!state.detailOpen || state.focusedPanel === "list" ? "cyan" : "gray"} flexGrow={1}>
-      <Text bold>
-        {pad("State", fixedCols.state)} {pad("Repo", fixedCols.repo)} {pad("PR", fixedCols.pr)} {pad("Author", fixedCols.author)} {pad("CI", fixedCols.ci)} {pad("Reviewers", fixedCols.reviewers)} {pad("Activity", fixedCols.activity)} {pad("Title", titleWidth)}
+    <Box flexDirection="column" borderStyle="single" borderColor={focusColor} flexGrow={1}>
+      <Text dimColor>
+        {pad("·", unreadCol)} {pad("CI", ciCol)} {pad("R", revCol)} {pad("Title", titleWidth)} {pad("Repo", repoCol)} {pad("Author", authorCol)} {pad("Age", ageCol)}
       </Text>
       <Text dimColor>{showingLabel}</Text>
       {visible.map((pr, i) => {
         const selected = scrollOffset + i === selectedRowIndex;
-        const badge = isUnread(state.persistedState, pr) ? "NEW" : "SEEN";
+        const unread = isUnread(state.persistedState, pr);
         const ci = formatCiStatus(pr);
+        const rev = formatReviewStatus(pr);
+        const age = formatAge(pr.activity.latestActivityAt);
         return (
-          <Text key={pr.id} inverse={selected}>
-            {pad(badge, fixedCols.state)} {pad(pr.repository, fixedCols.repo)} {pad(`#${pr.number}`, fixedCols.pr)} {pad(pr.author, fixedCols.author)}{" "}
-            <Text color={ci.color}>{pad(ci.symbol, fixedCols.ci)}</Text>
-            {" "}{pad(pr.requestedReviewers.join(", ") || "-", fixedCols.reviewers)} {pad(formatTimestamp(pr.activity.latestActivityAt), fixedCols.activity)} {pad(pr.title, titleWidth)}
+          <Text key={pr.id} inverse={selected} dimColor={!unread && !selected}>
+            <Text color={unread ? "yellow" : "gray"}>{unread ? "●" : "·"}</Text>
+            {" "}
+            <Text color={ci.color}>{pad(ci.symbol, ciCol - 1)}</Text>
+            {" "}
+            <Text color={rev.color}>{pad(rev.symbol, revCol - 1)}</Text>
+            {" "}
+            {pad(pr.title, titleWidth)}
+            {" "}
+            {pad(pr.repository, repoCol)}
+            {" "}
+            {pad(pr.author, authorCol)}
+            {" "}
+            {pad(age, ageCol)}
           </Text>
         );
       })}
-      {isLoadingMore && <Text color="yellow" dimColor>  ● Loading more...</Text>}
+      {isLoadingMore && <Text color="yellow" dimColor>  ● Loading more…</Text>}
     </Box>
   );
 }

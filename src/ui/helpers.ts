@@ -71,6 +71,26 @@ export function pad(s: string, w: number): string {
   return s.padEnd(w);
 }
 
+export function formatReviewStatus(pr: PullRequestSummary): { symbol: string; color: string } {
+  switch (pr.reviewDecision) {
+    case "APPROVED":           return { symbol: "✓", color: "green" };
+    case "CHANGES_REQUESTED":  return { symbol: "✗", color: "red" };
+    case "REVIEW_REQUIRED":    return { symbol: "◑", color: "cyan" };
+    default:                   return { symbol: "·", color: "gray" };
+  }
+}
+
+export function formatAge(isoDate: string): string {
+  const ms = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d`;
+  return `${Math.floor(days / 30)}mo`;
+}
+
 export function parseDiff(raw: string): DiffFile[] {
   if (!raw.trim()) return [];
 
