@@ -1,4 +1,5 @@
 import type { CiStatus, GitHubNotification, PullRequestDetail, PullRequestSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
+export declare function clearFetchCache(): void;
 export interface PullRequestNode {
     id: string;
     number: number;

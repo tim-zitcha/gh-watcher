@@ -3,7 +3,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Box, render, useApp, useInput, useStdout } from "ink";
 import open from "open";
 import { buildNotifications } from "../domain.js";
-import { extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData, fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff, fetchPullRequestsAuthoredBy, markNotificationRead, markAllNotificationsRead, } from "../github.js";
+import { clearFetchCache, extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData, fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff, fetchPullRequestsAuthoredBy, markNotificationRead, markAllNotificationsRead, } from "../github.js";
 import { sendNotifications } from "../notify.js";
 import { markSeen, saveState, updateWatchedAuthors } from "../state.js";
 import { PR_VIEWS, COMMON_WATCHED_AUTHORS, clampScroll, formatTimestamp, parseDiff, sortSecurityAlerts } from "./helpers.js";
@@ -47,6 +47,8 @@ function Dashboard({ options }) {
         detailDiffFileIndex: 0,
         focusedPanel: "list",
         messagesShowAll: false,
+        includeDraftsOverride: null,
+        viewScrollState: {},
     }));
     const isRefreshingRef = useRef(false);
     const isLoadingMoreRef = useRef(false);
@@ -60,6 +62,7 @@ function Dashboard({ options }) {
     const currentPrViewIndexRef = useRef(state.currentPrViewIndex);
     const modeRef = useRef(state.mode);
     const queuedRefreshRef = useRef(null);
+    const includeDraftsOverrideRef = useRef(null);
     // Incremented on each new refresh; stale async callbacks check this to self-abort
     const refreshGenerationRef = useRef(0);
     useEffect(() => {
@@ -68,6 +71,7 @@ function Dashboard({ options }) {
         securitySortModeRef.current = state.securitySortMode;
         currentPrViewIndexRef.current = state.currentPrViewIndex;
         modeRef.current = state.mode;
+        includeDraftsOverrideRef.current = state.includeDraftsOverride;
     });
     const doRefresh = useCallback(async (target) => {
         if (isRefreshingRef.current) {
@@ -80,6 +84,7 @@ function Dashboard({ options }) {
         dispatch({ type: "SET_REFRESHING", value: true });
         dispatch({ type: "SET_STATUS", status: `Refreshing ${target}…` });
         const cfg = options.config;
+        const effectiveIncludeDrafts = includeDraftsOverrideRef.current ?? cfg.includeDrafts;
         const current = attentionStateRef.current;
         const viewerLogin = current.viewerLogin;
         const repositoryScope = current.repositoryScope;
@@ -89,7 +94,7 @@ function Dashboard({ options }) {
             if (target === "myPrs" || target === "all") {
                 const data = await fetchMyPrsData({
                     viewerLogin,
-                    includeDrafts: cfg.includeDrafts,
+                    includeDrafts: effectiveIncludeDrafts,
                     repositoryScope,
                 });
                 next = {
@@ -104,7 +109,7 @@ function Dashboard({ options }) {
             if (target === "needsMyReview" || target === "all") {
                 const data = await fetchNeedsMyReviewData({
                     viewerLogin,
-                    includeDrafts: cfg.includeDrafts,
+                    includeDrafts: effectiveIncludeDrafts,
                     repositoryScope,
                 });
                 next = {
@@ -124,7 +129,7 @@ function Dashboard({ options }) {
                         : null);
                 const data = await fetchPullRequestsAuthoredBy({
                     author: watchedAuthor,
-                    includeDrafts: cfg.includeDrafts,
+                    includeDrafts: effectiveIncludeDrafts,
                     repositoryScope: authorScope,
                 });
                 next = {
@@ -573,6 +578,30 @@ function Dashboard({ options }) {
             void openAuthorPicker();
             return;
         }
+        if (input === "b" && state.mode === "pr") {
+            if (state.detailOpen) {
+                const pr = state.detailPr;
+                if (pr)
+                    void open(pr.url);
+            }
+            else {
+                const pr = getPrsForCurrentView()[state.selectedRowIndex];
+                if (pr)
+                    void open(pr.url);
+            }
+            return;
+        }
+        if (input === "D" && state.mode === "pr") {
+            dispatch({ type: "TOGGLE_DRAFTS_OVERRIDE" });
+            const next = state.includeDraftsOverride === null ? true : state.includeDraftsOverride === true ? false : null;
+            const label = next === null ? "default" : next ? "shown" : "hidden";
+            dispatch({ type: "SET_STATUS", status: `Draft PRs: ${label}` });
+            includeDraftsOverrideRef.current = next;
+            void doRefresh("myPrs");
+            void doRefresh("needsMyReview");
+            void doRefresh("watchedAuthor");
+            return;
+        }
         if (input === "o") {
             if (state.detailOpen) {
                 const pr = state.detailPr;
@@ -585,6 +614,7 @@ function Dashboard({ options }) {
             return;
         }
         if (input === "r") {
+            clearFetchCache();
             const target = modeRef.current === "security" ? "security" : modeRef.current === "messages" ? "messages" : currentViewKey();
             void doRefresh(target);
             return;

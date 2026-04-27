@@ -4,10 +4,31 @@ export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "SET_MODE":
       return { ...state, mode: action.mode, selectedRowIndex: 0, tableScrollOffset: 0 };
-    case "SET_VIEW_INDEX":
-      return { ...state, currentPrViewIndex: action.index, selectedRowIndex: 0, tableScrollOffset: 0 };
+    case "SET_VIEW_INDEX": {
+      const oldKey = String(state.currentPrViewIndex);
+      const newKey = String(action.index);
+      const savedScroll = state.viewScrollState[newKey] ?? { selectedRowIndex: 0, tableScrollOffset: 0 };
+      return {
+        ...state,
+        currentPrViewIndex: action.index,
+        selectedRowIndex: savedScroll.selectedRowIndex,
+        tableScrollOffset: savedScroll.tableScrollOffset,
+        viewScrollState: {
+          ...state.viewScrollState,
+          [oldKey]: { selectedRowIndex: state.selectedRowIndex, tableScrollOffset: state.tableScrollOffset },
+        },
+      };
+    }
     case "SET_SELECTED_ROW":
-      return { ...state, selectedRowIndex: action.index, tableScrollOffset: action.scrollOffset };
+      return {
+        ...state,
+        selectedRowIndex: action.index,
+        tableScrollOffset: action.scrollOffset,
+        viewScrollState: {
+          ...state.viewScrollState,
+          [String(state.currentPrViewIndex)]: { selectedRowIndex: action.index, tableScrollOffset: action.scrollOffset },
+        },
+      };
     case "SET_TABLE_SCROLL":
       return { ...state, tableScrollOffset: action.offset };
     case "SET_OVERLAY":
@@ -66,6 +87,11 @@ export function reducer(state: AppState, action: Action): AppState {
       const a = state.attentionState;
       const notifications = a.notifications.map(n => ({ ...n, unread: false }));
       return { ...state, attentionState: { ...a, notifications, notificationUnreadCount: 0 } };
+    }
+    case "TOGGLE_DRAFTS_OVERRIDE": {
+      const cur = state.includeDraftsOverride;
+      const next = cur === null ? true : cur === true ? false : null;
+      return { ...state, includeDraftsOverride: next };
     }
     case "SET_LOADING_MORE":
       return { ...state, isLoadingMore: action.value };

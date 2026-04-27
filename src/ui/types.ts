@@ -38,6 +38,8 @@ export interface AppState {
   detailDiffFileIndex: number;
   focusedPanel: "list" | "detail";
   messagesShowAll: boolean;
+  includeDraftsOverride: boolean | null;
+  viewScrollState: Partial<Record<string, { selectedRowIndex: number; tableScrollOffset: number }>>;
 }
 
 export type Action =
@@ -69,4 +71,5 @@ export type Action =
   | { type: "SET_FOCUSED_PANEL"; panel: "list" | "detail" }
   | { type: "SET_MESSAGES_SHOW_ALL"; value: boolean }
   | { type: "MARK_NOTIFICATION_READ"; threadId: string }
-  | { type: "MARK_ALL_NOTIFICATIONS_READ" };
+  | { type: "MARK_ALL_NOTIFICATIONS_READ" }
+  | { type: "TOGGLE_DRAFTS_OVERRIDE" };

@@ -38,14 +38,21 @@ export function updateWatchedAuthors(previous, login) {
         recent
     };
 }
+const NOTIFICATION_VIEWS = ["needsMyReview", "waitingOnOthers"];
 export function markSeen(state, pullRequests) {
     const seenActivityAtByPrId = { ...state.seenActivityAtByPrId };
+    const notificationFingerprintByKey = { ...state.notificationFingerprintByKey };
     for (const pullRequest of pullRequests) {
         seenActivityAtByPrId[pullRequest.id] = pullRequest.activity.latestActivityAt;
+        for (const view of NOTIFICATION_VIEWS) {
+            const key = notificationKey(view, pullRequest);
+            notificationFingerprintByKey[key] = pullRequest.activity.latestActivityAt;
+        }
     }
     return {
         ...state,
-        seenActivityAtByPrId
+        seenActivityAtByPrId,
+        notificationFingerprintByKey
     };
 }
 export function isUnread(state, pullRequest) {

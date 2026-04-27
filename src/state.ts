@@ -47,19 +47,28 @@ export function updateWatchedAuthors(previous: WatchedAuthorState, login: string
   };
 }
 
+const NOTIFICATION_VIEWS: ViewName[] = ["needsMyReview", "waitingOnOthers"];
+
 export function markSeen(
   state: PersistedState,
   pullRequests: PullRequestSummary[]
 ): PersistedState {
   const seenActivityAtByPrId = { ...state.seenActivityAtByPrId };
+  const notificationFingerprintByKey = { ...state.notificationFingerprintByKey };
 
   for (const pullRequest of pullRequests) {
     seenActivityAtByPrId[pullRequest.id] = pullRequest.activity.latestActivityAt;
+
+    for (const view of NOTIFICATION_VIEWS) {
+      const key = notificationKey(view, pullRequest);
+      notificationFingerprintByKey[key] = pullRequest.activity.latestActivityAt;
+    }
   }
 
   return {
     ...state,
-    seenActivityAtByPrId
+    seenActivityAtByPrId,
+    notificationFingerprintByKey
   };
 }
 

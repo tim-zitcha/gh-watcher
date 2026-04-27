@@ -3,6 +3,41 @@ import { spawn } from "node:child_process";
 import type { ActivitySnapshot, AlertSeverity, ChangedFile, CheckRun, CheckCounts, CiStatus, GitHubNotification, NotificationReason, PullRequestDetail, PullRequestSummary, ReviewSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
 import { isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
 
+// ---------------------------------------------------------------------------
+// Simple in-memory TTL cache
+// ---------------------------------------------------------------------------
+
+interface CacheEntry {
+  value: unknown;
+  expiresAt: number;
+}
+
+const _cache = new Map<string, CacheEntry>();
+
+const fetchCache = {
+  get<T>(key: string): T | undefined {
+    const entry = _cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      _cache.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
+  },
+  set(key: string, value: unknown, ttlMs: number): void {
+    _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  },
+  clear(): void {
+    _cache.clear();
+  }
+};
+
+export function clearFetchCache(): void {
+  fetchCache.clear();
+}
+
+// ---------------------------------------------------------------------------
+
 const SEARCH_PAGE_SIZE = 30; // GitHub recommends ≤30 for search; larger pages hit timeout limits
 const ACTIVITY_CHUNK_SIZE = 12; // nodes(ids:) has a 100-node hard cap; 12 keeps queries small
 
@@ -579,6 +614,10 @@ export async function fetchPullRequestsAuthoredBy(options: {
   repositoryScope: string | null;
   cursor?: string | null;
 }): Promise<{ pullRequests: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
+  const cacheKey = `fetchPullRequestsAuthoredBy:${options.author}:${options.repositoryScope ?? ""}:${options.includeDrafts}:${options.cursor ?? ""}`;
+  const cached = fetchCache.get<{ pullRequests: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }>(cacheKey);
+  if (cached) return cached;
+
   const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(
     scopedSearchQuery(
       `is:open is:pr archived:false sort:updated-desc author:${options.author}`,
@@ -587,7 +626,7 @@ export async function fetchPullRequestsAuthoredBy(options: {
     options.cursor ?? null
   );
 
-  return {
+  const result = {
     pullRequests: sortPullRequests(
       pullRequests.filter((pr) => shouldIncludePullRequest(pr, options.includeDrafts))
     ),
@@ -595,6 +634,8 @@ export async function fetchPullRequestsAuthoredBy(options: {
     nextCursor,
     totalCount
   };
+  fetchCache.set(cacheKey, result, 2 * 60 * 1000);
+  return result;
 }
 
 interface DependabotAlertResponse {
@@ -709,12 +750,18 @@ async function fetchDependabotAlertPage(org: string): Promise<SecurityAlert[]> {
 }
 
 export async function fetchDependabotAlerts(org: string): Promise<{ alerts: SecurityAlert[]; total: number }> {
+  const cacheKey = `fetchDependabotAlerts:${org}`;
+  const cached = fetchCache.get<{ alerts: SecurityAlert[]; total: number }>(cacheKey);
+  if (cached) return cached;
+
   const [alerts, total] = await Promise.all([
     fetchDependabotAlertPage(org),
     fetchDependabotAlertTotal(org)
   ]);
 
-  return { alerts, total };
+  const result = { alerts, total };
+  fetchCache.set(cacheKey, result, 10 * 60 * 1000);
+  return result;
 }
 
 const PULL_REQUEST_DETAIL_QUERY = `
@@ -929,6 +976,10 @@ export async function fetchMyPrsData(options: {
   cursor?: string | null;
 }): Promise<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
   const { viewerLogin, includeDrafts, repositoryScope } = options;
+  const cacheKey = `fetchMyPrsData:${viewerLogin}:${repositoryScope ?? ""}:${includeDrafts}:${options.cursor ?? ""}`;
+  const cached = fetchCache.get<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }>(cacheKey);
+  if (cached) return cached;
+
   const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(
     scopedSearchQuery(
       `is:open is:pr archived:false sort:updated-desc author:${viewerLogin}`,
@@ -942,7 +993,9 @@ export async function fetchMyPrsData(options: {
   const waitingOnOthers = sortPullRequests(
     myPullRequests.filter((pr) => shouldTrackWaitingOnOthers(pr, viewerLogin))
   );
-  return { myPullRequests, waitingOnOthers, hasMore, nextCursor, totalCount };
+  const result = { myPullRequests, waitingOnOthers, hasMore, nextCursor, totalCount };
+  fetchCache.set(cacheKey, result, 2 * 60 * 1000);
+  return result;
 }
 
 export async function fetchNeedsMyReviewData(options: {
@@ -952,6 +1005,10 @@ export async function fetchNeedsMyReviewData(options: {
   cursor?: string | null;
 }): Promise<{ needsMyReview: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
   const { viewerLogin, includeDrafts, repositoryScope } = options;
+  const cacheKey = `fetchNeedsMyReviewData:${viewerLogin}:${repositoryScope ?? ""}:${includeDrafts}:${options.cursor ?? ""}`;
+  const cached = fetchCache.get<{ needsMyReview: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }>(cacheKey);
+  if (cached) return cached;
+
   const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(
     scopedSearchQuery(
       `is:open is:pr archived:false sort:updated-desc review-requested:${viewerLogin}`,
@@ -959,7 +1016,7 @@ export async function fetchNeedsMyReviewData(options: {
     ),
     options.cursor ?? null
   );
-  return {
+  const result = {
     needsMyReview: sortPullRequests(
       pullRequests.filter(
         (pr) => shouldIncludePullRequest(pr, includeDrafts) && isRequestedReviewer(pr, viewerLogin)
@@ -969,6 +1026,8 @@ export async function fetchNeedsMyReviewData(options: {
     nextCursor,
     totalCount
   };
+  fetchCache.set(cacheKey, result, 2 * 60 * 1000);
+  return result;
 }
 
 export async function fetchAllViews(options: {
@@ -1066,6 +1125,10 @@ export async function markAllNotificationsRead(): Promise<void> {
 }
 
 export async function fetchNotifications(): Promise<GitHubNotification[]> {
+  const cacheKey = "fetchNotifications";
+  const cached = fetchCache.get<GitHubNotification[]>(cacheKey);
+  if (cached) return cached;
+
   const payload = await runGhRest(
     "/notifications?all=false&per_page=50"
   );
@@ -1082,7 +1145,7 @@ export async function fetchNotifications(): Promise<GitHubNotification[]> {
 
   const raw = JSON.parse(payload) as RawNotification[];
 
-  return raw.map((n) => ({
+  const result = raw.map((n) => ({
     id: n.id,
     unread: n.unread,
     reason: n.reason as NotificationReason,
@@ -1090,4 +1153,6 @@ export async function fetchNotifications(): Promise<GitHubNotification[]> {
     repository: n.repository.full_name,
     updatedAt: n.updated_at,
   }));
+  fetchCache.set(cacheKey, result, 1 * 60 * 1000);
+  return result;
 }
