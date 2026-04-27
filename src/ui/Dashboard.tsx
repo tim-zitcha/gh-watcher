@@ -151,10 +151,14 @@ function Dashboard({ options }: { options: DashboardOptions }) {
         };
       }
       if (target === "security" || target === "all") {
-        const org = extractOrgFromScope(repositoryScope);
-        if (org) {
-          const data = await fetchDependabotAlerts(org);
-          next = { ...next, securityAlerts: data.alerts, securityAlertTotal: data.total };
+        // Prefer the explicitly-scoped org; otherwise query all known orgs in parallel
+        const scopedOrg = extractOrgFromScope(repositoryScope);
+        const orgsToQuery = scopedOrg ? [scopedOrg] : options.organizations;
+        if (orgsToQuery.length > 0) {
+          const results = await Promise.all(orgsToQuery.map((o) => fetchDependabotAlerts(o)));
+          const alerts = results.flatMap((r) => r.alerts);
+          const total = results.reduce((sum, r) => sum + r.total, 0);
+          next = { ...next, securityAlerts: alerts, securityAlertTotal: total };
         }
       }
 
@@ -574,7 +578,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       ) : (
         <Box flexDirection="row" flexGrow={1}>
           {state.mode === "pr" && <PrList state={state} narrow={state.detailOpen} />}
-          {state.mode === "security" && <SecurityList state={state} />}
+          {state.mode === "security" && <SecurityList state={state} hasOrgs={options.organizations.length > 0} />}
           {state.detailOpen && <PrDetail state={state} />}
         </Box>
       )}
