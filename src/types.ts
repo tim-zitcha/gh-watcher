@@ -41,10 +41,18 @@ export interface TrackedAttentionState {
   repositoryScope: string | null;
   watchedAuthor: string | null;
   myPullRequests: PullRequestSummary[];
+  myPullRequestsHasMore?: boolean;
+  myPullRequestsNextCursor?: string | null;
+  myPullRequestsTotalCount?: number;
   needsMyReview: PullRequestSummary[];
+  needsMyReviewHasMore?: boolean;
+  needsMyReviewNextCursor?: string | null;
+  needsMyReviewTotalCount?: number;
   waitingOnOthers: PullRequestSummary[];
   watchedAuthorPullRequests: PullRequestSummary[];
-  watchedAuthorTotal: number;
+  watchedAuthorHasMore?: boolean;
+  watchedAuthorNextCursor?: string | null;
+  watchedAuthorTotalCount?: number;
   securityAlerts: SecurityAlert[];
   securityAlertTotal: number;
   refreshedAt: string;
@@ -139,4 +147,14 @@ export interface PullRequestDetail {
   reviews: ReviewSummary[];
   requestedReviewers: string[];
   files: ChangedFile[];
+}
+
+export interface DiffLine {
+  type: "add" | "del" | "hunk" | "file" | "ctx";
+  text: string;
+}
+
+export interface DiffFile {
+  header: string;
+  lines: DiffLine[];
 }
