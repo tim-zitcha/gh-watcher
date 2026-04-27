@@ -3,9 +3,15 @@ import { Box, Text, useStdout } from "ink";
 import { formatTimestamp, htmlToText, parseDiff } from "../helpers.js";
 import type { AppState } from "../types.js";
 
+function truncate(text: string, maxWidth: number): string {
+  if (text.length <= maxWidth) return text;
+  return text.slice(0, Math.max(0, maxWidth - 1)) + "…";
+}
+
 export function PrDetail({ state }: { state: AppState }) {
   const { stdout } = useStdout();
   const rows = stdout?.rows ?? 24;
+  const cols = stdout?.columns ?? 120;
   const { detailPr: pr, detailData, detailLoading, detailScrollOffset, detailDiff, detailDiffVisible, detailDiffFileIndex } = state;
   if (!pr) return null;
 
@@ -103,11 +109,14 @@ export function PrDetail({ state }: { state: AppState }) {
   const thumbSize = needsScrollbar ? Math.max(1, Math.round(visibleLines * visibleLines / lines.length)) : 0;
   const thumbStart = needsScrollbar ? Math.round((offset / Math.max(1, maxOffset)) * (visibleLines - thumbSize)) : 0;
 
+  // Panel occupies ~62% of terminal width; subtract 2 for borders and 1 for scrollbar char
+  const panelWidth = Math.floor(cols * 0.62) - 3;
+
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="yellow" width="62%" flexShrink={0}>
       {visible.map((line, i) => (
         <Box key={i} justifyContent="space-between">
-          <Text bold={line.bold} color={line.color} dimColor={line.dimColor}>{line.text || " "}</Text>
+          <Text bold={line.bold} color={line.color} dimColor={line.dimColor}>{truncate(line.text || " ", panelWidth)}</Text>
           {needsScrollbar && (
             <Text color={i >= thumbStart && i < thumbStart + thumbSize ? "yellow" : "gray"}>
               {i >= thumbStart && i < thumbStart + thumbSize ? "│" : "·"}
