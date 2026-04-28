@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/tim-zitcha/gh-watcher/compare/v1.1.0...v1.2.0) (2026-04-28)
+
+
+### Features
+
+* ready-to-merge view, ready-to-merge notifications, resize handling ([1ad8a93](https://github.com/tim-zitcha/gh-watcher/commit/1ad8a9321ff7219bc0de7b0125baffd7a0f8e2f8))
+
 ## [1.1.0](https://github.com/tim-zitcha/gh-watcher/compare/v1.0.0...v1.1.0) (2026-04-27)
 
 
