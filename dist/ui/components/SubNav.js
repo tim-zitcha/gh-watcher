@@ -31,6 +31,10 @@ export function SubNav({ state }) {
             count: String(waitingOnOthers.length),
         },
         {
+            key: "readyToMerge", label: "Ready to merge",
+            count: String(attentionState.readyToMerge.length),
+        },
+        {
             key: "watchedAuthor", label: watchedAuthor ? `Watched: ${watchedAuthor}` : "Watched",
             count: watchedAuthorHasMore ? `${watchedAuthorPullRequests.length}+` : String(watchedAuthorPullRequests.length),
         },

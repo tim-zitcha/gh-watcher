@@ -1,8 +1,9 @@
 import React from "react";
-import { Box, Text, useStdout } from "ink";
+import { Box, Text } from "ink";
 import { clampScroll, formatAge, pad } from "../helpers.js";
 import type { AppState } from "../types.js";
 import type { NotificationReason } from "../../types.js";
+import { useTerminalSize } from "../useTerminalSize.js";
 
 function reasonLabel(reason: NotificationReason): { label: string; color: string } {
   switch (reason) {
@@ -19,9 +20,7 @@ function reasonLabel(reason: NotificationReason): { label: string; color: string
 }
 
 export function MessagesList({ state }: { state: AppState }) {
-  const { stdout } = useStdout();
-  const rows = stdout?.rows ?? 24;
-  const cols = stdout?.columns ?? 200;
+  const { columns: cols, rows } = useTerminalSize();
   const visibleRows = Math.max(1, rows - 9);
 
   const { attentionState, messagesShowAll, selectedRowIndex, isRefreshing } = state;

@@ -1,5 +1,5 @@
 import he from "he";
-export const PR_VIEWS = ["myPullRequests", "needsMyReview", "waitingOnOthers", "watchedAuthor"];
+export const PR_VIEWS = ["myPullRequests", "needsMyReview", "waitingOnOthers", "readyToMerge", "watchedAuthor"];
 export const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
 export const COMMON_WATCHED_AUTHORS = ["dependabot[bot]"];
 export function formatTimestamp(value) {

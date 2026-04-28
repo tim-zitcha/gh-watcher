@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { Box, Text, useStdout } from "ink";
+import { Box, Text } from "ink";
 import { clampScroll, formatTimestamp, pad, sortSecurityAlerts } from "../helpers.js";
+import { useTerminalSize } from "../useTerminalSize.js";
 function severityColor(s) {
     switch (s) {
         case "critical": return "red";
@@ -11,9 +12,7 @@ function severityColor(s) {
     }
 }
 export function SecurityList({ state, hasOrgs }) {
-    const { stdout } = useStdout();
-    const cols = stdout?.columns ?? 200;
-    const rows = stdout?.rows ?? 24;
+    const { columns: cols, rows } = useTerminalSize();
     const visibleRows = Math.max(1, rows - 9);
     const { attentionState, securitySortMode, selectedRowIndex } = state;
     if (!hasOrgs && !attentionState.repositoryScope?.startsWith("org:")) {

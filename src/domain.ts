@@ -21,6 +21,12 @@ export function isRequestedReviewer(
   return pullRequest.requestedReviewers.includes(viewerLogin);
 }
 
+export function isReadyToMerge(pullRequest: PullRequestSummary): boolean {
+  if (pullRequest.isDraft) return false;
+  if (pullRequest.mergeable !== "MERGEABLE") return false;
+  return pullRequest.mergeStateStatus === "CLEAN" || pullRequest.mergeStateStatus === "HAS_HOOKS";
+}
+
 export function shouldTrackWaitingOnOthers(
   pullRequest: PullRequestSummary,
   viewerLogin: string
@@ -68,6 +74,7 @@ export function buildNotifications(
   const previousWaitingFingerprints = new Map(
     previousState?.waitingOnOthers.map((pr) => [pr.id, pr.activity.fingerprint]) ?? []
   );
+  const previousReadyToMergeIds = new Set(previousState?.readyToMerge.map((pr) => pr.id) ?? []);
 
   for (const pullRequest of nextState.needsMyReview) {
     const dedupeKey = notificationKey("needsMyReview", pullRequest);
@@ -102,6 +109,18 @@ export function buildNotifications(
         message: `${pullRequest.repository} #${pullRequest.number} ${pullRequest.title}`
       });
     }
+  }
+
+  for (const pullRequest of nextState.readyToMerge) {
+    if (previousReadyToMergeIds.has(pullRequest.id)) continue;
+    const dedupeKey = notificationKey("readyToMerge", pullRequest);
+    const recordedFingerprint = persistedState.notificationFingerprintByKey[dedupeKey];
+    if (recordedFingerprint === pullRequest.activity.fingerprint) continue;
+    events.push({
+      dedupeKey,
+      title: "PR is ready to merge",
+      message: `${pullRequest.repository} #${pullRequest.number} ${pullRequest.title}`
+    });
   }
 
   return events;

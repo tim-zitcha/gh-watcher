@@ -1,6 +1,7 @@
 import { jsxs as _jsxs, jsx as _jsx } from "react/jsx-runtime";
-import { Box, Text, useStdout } from "ink";
+import { Box, Text } from "ink";
 import { clampScroll, formatAge, pad } from "../helpers.js";
+import { useTerminalSize } from "../useTerminalSize.js";
 function reasonLabel(reason) {
     switch (reason) {
         case "mention": return { label: "MENTION", color: "cyan" };
@@ -15,9 +16,7 @@ function reasonLabel(reason) {
     }
 }
 export function MessagesList({ state }) {
-    const { stdout } = useStdout();
-    const rows = stdout?.rows ?? 24;
-    const cols = stdout?.columns ?? 200;
+    const { columns: cols, rows } = useTerminalSize();
     const visibleRows = Math.max(1, rows - 9);
     const { attentionState, messagesShowAll, selectedRowIndex, isRefreshing } = state;
     const all = attentionState.notifications;

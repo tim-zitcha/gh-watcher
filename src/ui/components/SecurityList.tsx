@@ -1,8 +1,9 @@
 import React from "react";
-import { Box, Text, useStdout } from "ink";
+import { Box, Text } from "ink";
 import type { AlertSeverity } from "../../types.js";
 import { clampScroll, formatTimestamp, pad, sortSecurityAlerts } from "../helpers.js";
 import type { AppState } from "../types.js";
+import { useTerminalSize } from "../useTerminalSize.js";
 
 function severityColor(s: AlertSeverity): string {
   switch (s) {
@@ -15,9 +16,7 @@ function severityColor(s: AlertSeverity): string {
 }
 
 export function SecurityList({ state, hasOrgs }: { state: AppState; hasOrgs: boolean }) {
-  const { stdout } = useStdout();
-  const cols = stdout?.columns ?? 200;
-  const rows = stdout?.rows ?? 24;
+  const { columns: cols, rows } = useTerminalSize();
   const visibleRows = Math.max(1, rows - 9);
 
   const { attentionState, securitySortMode, selectedRowIndex } = state;

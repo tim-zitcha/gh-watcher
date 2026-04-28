@@ -105,6 +105,7 @@ export function reducer(state: AppState, action: Action): AppState {
           myPullRequestsHasMore: action.hasMore,
           myPullRequestsNextCursor: action.nextCursor,
           waitingOnOthers: [...a.waitingOnOthers, ...action.waitingOnOthers],
+          readyToMerge: [...a.readyToMerge, ...action.readyToMerge],
         },
       };
     }

@@ -61,7 +61,7 @@ export type Action =
   | { type: "SET_DETAIL_DATA"; data: PullRequestDetail | null }
   | { type: "SET_DETAIL_SCROLL"; offset: number }
   | { type: "CLOSE_DETAIL" }
-  | { type: "APPEND_MY_PRS"; pullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null }
+  | { type: "APPEND_MY_PRS"; pullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; readyToMerge: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null }
   | { type: "APPEND_NEEDS_MY_REVIEW"; pullRequests: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null }
   | { type: "APPEND_WATCHED_AUTHOR"; pullRequests: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null }
   | { type: "SET_LOADING_MORE"; value: boolean }

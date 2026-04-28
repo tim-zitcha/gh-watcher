@@ -19,6 +19,8 @@ function makeNode(overrides: Partial<PullRequestNode> = {}): PullRequestNode {
     isDraft: false,
     updatedAt: "2026-04-24T00:00:00Z",
     reviewDecision: "REVIEW_REQUIRED",
+    mergeable: "UNKNOWN",
+    mergeStateStatus: "UNKNOWN",
     repository: { nameWithOwner: "acme/repo" },
     author: { login: "alice" },
     reviewRequests: { nodes: [] },

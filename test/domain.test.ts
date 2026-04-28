@@ -23,7 +23,9 @@ function createPullRequest(overrides: Partial<PullRequestSummary> = {}): PullReq
       latestReviewAt: null,
       latestCommitAt: "2026-04-24T00:00:00Z",
       fingerprint: "none|none|oid-1|2026-04-24T00:00:00Z"
-    }
+    },
+    mergeable: overrides.mergeable ?? "UNKNOWN",
+    mergeStateStatus: overrides.mergeStateStatus ?? "UNKNOWN"
   };
 }
 
@@ -35,6 +37,7 @@ function createTrackedState(overrides: Partial<TrackedAttentionState> = {}): Tra
     myPullRequests: [],
     needsMyReview: [],
     waitingOnOthers: [],
+    readyToMerge: [],
     watchedAuthorPullRequests: [],
     securityAlerts: [],
     securityAlertTotal: 0,

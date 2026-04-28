@@ -47,7 +47,7 @@ export function updateWatchedAuthors(previous: WatchedAuthorState, login: string
   };
 }
 
-const NOTIFICATION_VIEWS: ViewName[] = ["needsMyReview", "waitingOnOthers"];
+const NOTIFICATION_VIEWS: ViewName[] = ["needsMyReview", "waitingOnOthers", "readyToMerge"];
 
 export function markSeen(
   state: PersistedState,

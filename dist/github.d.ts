@@ -1,4 +1,4 @@
-import type { CiStatus, GitHubNotification, PullRequestDetail, PullRequestSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
+import type { CiStatus, GitHubNotification, Mergeable, MergeStateStatus, PullRequestDetail, PullRequestSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
 export declare function clearFetchCache(): void;
 export interface PullRequestNode {
     id: string;
@@ -8,6 +8,8 @@ export interface PullRequestNode {
     isDraft: boolean;
     updatedAt: string;
     reviewDecision: PullRequestSummary["reviewDecision"];
+    mergeable: Mergeable;
+    mergeStateStatus: MergeStateStatus;
     repository: {
         nameWithOwner: string;
     };
@@ -91,6 +93,7 @@ export declare function fetchMyPrsData(options: {
 }): Promise<{
     myPullRequests: PullRequestSummary[];
     waitingOnOthers: PullRequestSummary[];
+    readyToMerge: PullRequestSummary[];
     hasMore: boolean;
     nextCursor: string | null;
     totalCount: number;

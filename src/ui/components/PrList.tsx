@@ -1,13 +1,12 @@
 import React from "react";
-import { Box, Text, useStdout } from "ink";
+import { Box, Text } from "ink";
 import { isUnread } from "../../state.js";
 import { PR_VIEWS, clampScroll, formatCiStatus, formatAge, formatReviewStatus, pad } from "../helpers.js";
 import type { AppState } from "../types.js";
+import { useTerminalSize } from "../useTerminalSize.js";
 
 export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) {
-  const { stdout } = useStdout();
-  const cols = stdout?.columns ?? 200;
-  const rows = stdout?.rows ?? 24;
+  const { columns: cols, rows } = useTerminalSize();
   const visibleRows = Math.max(1, rows - 9);
 
   const view = PR_VIEWS[state.currentPrViewIndex]!;
@@ -18,6 +17,7 @@ export function PrList({ state, narrow }: { state: AppState; narrow: boolean }) 
       case "myPullRequests": return attentionState.myPullRequests;
       case "needsMyReview": return attentionState.needsMyReview;
       case "waitingOnOthers": return attentionState.waitingOnOthers;
+      case "readyToMerge": return attentionState.readyToMerge;
       case "watchedAuthor": return attentionState.watchedAuthorPullRequests;
       default: return [];
     }

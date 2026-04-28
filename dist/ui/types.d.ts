@@ -102,6 +102,7 @@ export type Action = {
     type: "APPEND_MY_PRS";
     pullRequests: PullRequestSummary[];
     waitingOnOthers: PullRequestSummary[];
+    readyToMerge: PullRequestSummary[];
     hasMore: boolean;
     nextCursor: string | null;
 } | {

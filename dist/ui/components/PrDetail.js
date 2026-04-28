@@ -1,15 +1,14 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { Box, Text, useStdout } from "ink";
+import { Box, Text } from "ink";
 import { formatTimestamp, htmlToText, parseDiff } from "../helpers.js";
+import { useTerminalSize } from "../useTerminalSize.js";
 function truncate(text, maxWidth) {
     if (text.length <= maxWidth)
         return text;
     return text.slice(0, Math.max(0, maxWidth - 1)) + "…";
 }
 export function PrDetail({ state }) {
-    const { stdout } = useStdout();
-    const rows = stdout?.rows ?? 24;
-    const cols = stdout?.columns ?? 120;
+    const { columns: cols, rows } = useTerminalSize();
     const { detailPr: pr, detailData, detailLoading, detailScrollOffset, detailDiff, detailDiffVisible, detailDiffFileIndex } = state;
     if (!pr)
         return null;

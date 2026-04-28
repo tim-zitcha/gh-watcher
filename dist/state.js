@@ -38,7 +38,7 @@ export function updateWatchedAuthors(previous, login) {
         recent
     };
 }
-const NOTIFICATION_VIEWS = ["needsMyReview", "waitingOnOthers"];
+const NOTIFICATION_VIEWS = ["needsMyReview", "waitingOnOthers", "readyToMerge"];
 export function markSeen(state, pullRequests) {
     const seenActivityAtByPrId = { ...state.seenActivityAtByPrId };
     const notificationFingerprintByKey = { ...state.notificationFingerprintByKey };

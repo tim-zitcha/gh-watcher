@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
+import { isReadyToMerge, isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
 const _cache = new Map();
 const fetchCache = {
     get(key) {
@@ -50,6 +50,8 @@ const SEARCH_QUERY = `
           isDraft
           updatedAt
           reviewDecision
+          mergeable
+          mergeStateStatus
           repository {
             nameWithOwner
           }
@@ -245,6 +247,8 @@ export function mapPullRequestNode(node) {
         isDraft: node.isDraft,
         updatedAt: node.updatedAt,
         reviewDecision: node.reviewDecision,
+        mergeable: node.mergeable,
+        mergeStateStatus: node.mergeStateStatus,
         requestedReviewers: node.reviewRequests.nodes
             .map((item) => normalizeRequestedReviewer(item.requestedReviewer))
             .filter((reviewer) => Boolean(reviewer)),
@@ -614,7 +618,8 @@ export async function fetchMyPrsData(options) {
     const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(scopedSearchQuery(`is:open is:pr archived:false sort:updated-desc author:${viewerLogin}`, repositoryScope), options.cursor ?? null);
     const myPullRequests = sortPullRequests(pullRequests.filter((pr) => shouldIncludePullRequest(pr, includeDrafts)));
     const waitingOnOthers = sortPullRequests(myPullRequests.filter((pr) => shouldTrackWaitingOnOthers(pr, viewerLogin)));
-    const result = { myPullRequests, waitingOnOthers, hasMore, nextCursor, totalCount };
+    const readyToMerge = sortPullRequests(myPullRequests.filter(isReadyToMerge));
+    const result = { myPullRequests, waitingOnOthers, readyToMerge, hasMore, nextCursor, totalCount };
     fetchCache.set(cacheKey, result, 2 * 60 * 1000);
     return result;
 }
@@ -659,6 +664,7 @@ export async function fetchAllViews(options) {
         needsMyReviewNextCursor: needsMyReviewData.nextCursor,
         needsMyReviewTotalCount: needsMyReviewData.totalCount,
         waitingOnOthers: myPrsData.waitingOnOthers,
+        readyToMerge: myPrsData.readyToMerge,
         watchedAuthorPullRequests,
         watchedAuthorHasMore: watchedAuthorSearch.hasMore,
         watchedAuthorNextCursor: watchedAuthorSearch.nextCursor,

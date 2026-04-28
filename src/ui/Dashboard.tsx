@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useReducer, useRef } from "react";
-import { Box, render, useApp, useInput, useStdout } from "ink";
+import { Box, render, useApp, useInput } from "ink";
+import { useTerminalSize } from "./useTerminalSize.js";
 import open from "open";
 
 import { buildNotifications } from "../domain.js";
@@ -31,7 +32,7 @@ export async function runDashboard(options: DashboardOptions): Promise<void> {
 
 function Dashboard({ options }: { options: DashboardOptions }) {
   const { exit } = useApp();
-  const { stdout } = useStdout();
+  const { rows: termRows } = useTerminalSize();
   const [state, dispatch] = useReducer(reducer, null, () => ({
     mode: "pr" as AppMode,
     currentPrViewIndex: 0,
@@ -121,6 +122,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           myPullRequestsNextCursor: data.nextCursor,
           myPullRequestsTotalCount: data.totalCount,
           waitingOnOthers: data.waitingOnOthers,
+          readyToMerge: data.readyToMerge,
         };
       }
       if (target === "needsMyReview" || target === "all") {
@@ -193,6 +195,8 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           ? next.needsMyReview.length
           : view === "waitingOnOthers"
           ? next.waitingOnOthers.length
+          : view === "readyToMerge"
+          ? next.readyToMerge.length
           : next.watchedAuthorPullRequests.length;
 
       // Discard results if a newer refresh (e.g. author change) has superseded this one
@@ -285,7 +289,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       dispatch({ type: "SET_LOADING_MORE", value: true });
       try {
         const data = await fetchMyPrsData({ viewerLogin: current.viewerLogin, includeDrafts: cfg.includeDrafts, repositoryScope, cursor });
-        dispatch({ type: "APPEND_MY_PRS", pullRequests: data.myPullRequests, waitingOnOthers: data.waitingOnOthers, hasMore: data.hasMore, nextCursor: data.nextCursor });
+        dispatch({ type: "APPEND_MY_PRS", pullRequests: data.myPullRequests, waitingOnOthers: data.waitingOnOthers, readyToMerge: data.readyToMerge, hasMore: data.hasMore, nextCursor: data.nextCursor });
       } catch (err) {
         dispatch({ type: "SET_STATUS", status: `Load-more failed: ${err instanceof Error ? err.message : String(err)}` });
       } finally {
@@ -330,6 +334,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       case "myPullRequests": return state.attentionState.myPullRequests;
       case "needsMyReview": return state.attentionState.needsMyReview;
       case "waitingOnOthers": return state.attentionState.waitingOnOthers;
+      case "readyToMerge": return state.attentionState.readyToMerge;
       case "watchedAuthor": return state.attentionState.watchedAuthorPullRequests;
       default: return [];
     }
@@ -340,12 +345,14 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       case "myPullRequests": return "myPrs";
       case "needsMyReview": return "needsMyReview";
       case "watchedAuthor": return "watchedAuthor";
+      case "waitingOnOthers": return "myPrs";
+      case "readyToMerge": return "myPrs";
       default: return "myPrs";
     }
   }
 
   function moveSelection(offset: number): void {
-    const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
+    const visibleRows = Math.max(1, (termRows) - 9);
     if (state.mode === "security") {
       const alerts = sortSecurityAlerts(state.attentionState.securityAlerts, state.securitySortMode);
       if (alerts.length === 0) return;
@@ -516,7 +523,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     }
     if (input === "G") {
       const n = getPrsForCurrentView().length - 1;
-      const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
+      const visibleRows = Math.max(1, (termRows) - 9);
       dispatch({ type: "SET_SELECTED_ROW", index: Math.max(0, n), scrollOffset: Math.max(0, n - (visibleRows - 1)) });
       return;
     }
@@ -667,7 +674,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
   const showOverlay = state.activeOverlay !== null;
 
   return (
-    <Box flexDirection="column" height={stdout?.rows ?? 24}>
+    <Box flexDirection="column" height={termRows}>
       <Header state={state} />
       {showOverlay ? (
         <Box flexGrow={1} flexDirection="column" paddingX={2} paddingY={1}>

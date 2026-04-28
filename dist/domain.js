@@ -5,6 +5,13 @@ export function shouldIncludePullRequest(pullRequest, includeDrafts) {
 export function isRequestedReviewer(pullRequest, viewerLogin) {
     return pullRequest.requestedReviewers.includes(viewerLogin);
 }
+export function isReadyToMerge(pullRequest) {
+    if (pullRequest.isDraft)
+        return false;
+    if (pullRequest.mergeable !== "MERGEABLE")
+        return false;
+    return pullRequest.mergeStateStatus === "CLEAN" || pullRequest.mergeStateStatus === "HAS_HOOKS";
+}
 export function shouldTrackWaitingOnOthers(pullRequest, viewerLogin) {
     if (pullRequest.author !== viewerLogin) {
         return false;
@@ -33,6 +40,7 @@ export function buildNotifications(previousState, nextState, persistedState) {
     const events = [];
     const previousNeedsMyReviewIds = new Set(previousState?.needsMyReview.map((pr) => pr.id) ?? []);
     const previousWaitingFingerprints = new Map(previousState?.waitingOnOthers.map((pr) => [pr.id, pr.activity.fingerprint]) ?? []);
+    const previousReadyToMergeIds = new Set(previousState?.readyToMerge.map((pr) => pr.id) ?? []);
     for (const pullRequest of nextState.needsMyReview) {
         const dedupeKey = notificationKey("needsMyReview", pullRequest);
         const previousFingerprint = persistedState.notificationFingerprintByKey[dedupeKey];
@@ -61,6 +69,19 @@ export function buildNotifications(previousState, nextState, persistedState) {
                 message: `${pullRequest.repository} #${pullRequest.number} ${pullRequest.title}`
             });
         }
+    }
+    for (const pullRequest of nextState.readyToMerge) {
+        if (previousReadyToMergeIds.has(pullRequest.id))
+            continue;
+        const dedupeKey = notificationKey("readyToMerge", pullRequest);
+        const recordedFingerprint = persistedState.notificationFingerprintByKey[dedupeKey];
+        if (recordedFingerprint === pullRequest.activity.fingerprint)
+            continue;
+        events.push({
+            dedupeKey,
+            title: "PR is ready to merge",
+            message: `${pullRequest.repository} #${pullRequest.number} ${pullRequest.title}`
+        });
     }
     return events;
 }

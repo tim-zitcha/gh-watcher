@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { Box, render, useApp, useInput, useStdout } from "ink";
+import { Box, render, useApp, useInput } from "ink";
+import { useTerminalSize } from "./useTerminalSize.js";
 import open from "open";
 import { buildNotifications } from "../domain.js";
 import { clearFetchCache, extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData, fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff, fetchPullRequestsAuthoredBy, markNotificationRead, markAllNotificationsRead, } from "../github.js";
@@ -21,7 +22,7 @@ export async function runDashboard(options) {
 }
 function Dashboard({ options }) {
     const { exit } = useApp();
-    const { stdout } = useStdout();
+    const { rows: termRows } = useTerminalSize();
     const [state, dispatch] = useReducer(reducer, null, () => ({
         mode: "pr",
         currentPrViewIndex: 0,
@@ -104,6 +105,7 @@ function Dashboard({ options }) {
                     myPullRequestsNextCursor: data.nextCursor,
                     myPullRequestsTotalCount: data.totalCount,
                     waitingOnOthers: data.waitingOnOthers,
+                    readyToMerge: data.readyToMerge,
                 };
             }
             if (target === "needsMyReview" || target === "all") {
@@ -173,7 +175,9 @@ function Dashboard({ options }) {
                             ? next.needsMyReview.length
                             : view === "waitingOnOthers"
                                 ? next.waitingOnOthers.length
-                                : next.watchedAuthorPullRequests.length;
+                                : view === "readyToMerge"
+                                    ? next.readyToMerge.length
+                                    : next.watchedAuthorPullRequests.length;
             // Discard results if a newer refresh (e.g. author change) has superseded this one
             if (refreshGenerationRef.current !== generation)
                 return;
@@ -266,7 +270,7 @@ function Dashboard({ options }) {
             dispatch({ type: "SET_LOADING_MORE", value: true });
             try {
                 const data = await fetchMyPrsData({ viewerLogin: current.viewerLogin, includeDrafts: cfg.includeDrafts, repositoryScope, cursor });
-                dispatch({ type: "APPEND_MY_PRS", pullRequests: data.myPullRequests, waitingOnOthers: data.waitingOnOthers, hasMore: data.hasMore, nextCursor: data.nextCursor });
+                dispatch({ type: "APPEND_MY_PRS", pullRequests: data.myPullRequests, waitingOnOthers: data.waitingOnOthers, readyToMerge: data.readyToMerge, hasMore: data.hasMore, nextCursor: data.nextCursor });
             }
             catch (err) {
                 dispatch({ type: "SET_STATUS", status: `Load-more failed: ${err instanceof Error ? err.message : String(err)}` });
@@ -320,6 +324,7 @@ function Dashboard({ options }) {
             case "myPullRequests": return state.attentionState.myPullRequests;
             case "needsMyReview": return state.attentionState.needsMyReview;
             case "waitingOnOthers": return state.attentionState.waitingOnOthers;
+            case "readyToMerge": return state.attentionState.readyToMerge;
             case "watchedAuthor": return state.attentionState.watchedAuthorPullRequests;
             default: return [];
         }
@@ -329,11 +334,13 @@ function Dashboard({ options }) {
             case "myPullRequests": return "myPrs";
             case "needsMyReview": return "needsMyReview";
             case "watchedAuthor": return "watchedAuthor";
+            case "waitingOnOthers": return "myPrs";
+            case "readyToMerge": return "myPrs";
             default: return "myPrs";
         }
     }
     function moveSelection(offset) {
-        const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
+        const visibleRows = Math.max(1, (termRows) - 9);
         if (state.mode === "security") {
             const alerts = sortSecurityAlerts(state.attentionState.securityAlerts, state.securitySortMode);
             if (alerts.length === 0)
@@ -510,7 +517,7 @@ function Dashboard({ options }) {
         }
         if (input === "G") {
             const n = getPrsForCurrentView().length - 1;
-            const visibleRows = Math.max(1, (stdout?.rows ?? 24) - 9);
+            const visibleRows = Math.max(1, (termRows) - 9);
             dispatch({ type: "SET_SELECTED_ROW", index: Math.max(0, n), scrollOffset: Math.max(0, n - (visibleRows - 1)) });
             return;
         }
@@ -672,5 +679,5 @@ function Dashboard({ options }) {
         }
     });
     const showOverlay = state.activeOverlay !== null;
-    return (_jsxs(Box, { flexDirection: "column", height: stdout?.rows ?? 24, children: [_jsx(Header, { state: state }), showOverlay ? (_jsx(Box, { flexGrow: 1, flexDirection: "column", paddingX: 2, paddingY: 1, children: _jsx(Overlays, { state: state, authorOptions: buildAuthorOptions(), scopeOptions: buildScopeOptions(), onAuthorSelect: handleAuthorSelect, onScopeSelect: handleScopeSelect, onCustomUser: handleCustomUser, onCancel: closeOverlay }) })) : (_jsxs(Box, { flexDirection: "row", flexGrow: 1, children: [state.mode === "pr" && _jsx(PrList, { state: state, narrow: state.detailOpen }), state.mode === "security" && _jsx(SecurityList, { state: state, hasOrgs: options.organizations.length > 0 }), state.mode === "messages" && _jsx(MessagesList, { state: state }), state.detailOpen && _jsx(PrDetail, { state: state })] })), _jsx(Footer, { state: state })] }));
+    return (_jsxs(Box, { flexDirection: "column", height: termRows, children: [_jsx(Header, { state: state }), showOverlay ? (_jsx(Box, { flexGrow: 1, flexDirection: "column", paddingX: 2, paddingY: 1, children: _jsx(Overlays, { state: state, authorOptions: buildAuthorOptions(), scopeOptions: buildScopeOptions(), onAuthorSelect: handleAuthorSelect, onScopeSelect: handleScopeSelect, onCustomUser: handleCustomUser, onCancel: closeOverlay }) })) : (_jsxs(Box, { flexDirection: "row", flexGrow: 1, children: [state.mode === "pr" && _jsx(PrList, { state: state, narrow: state.detailOpen }), state.mode === "security" && _jsx(SecurityList, { state: state, hasOrgs: options.organizations.length > 0 }), state.mode === "messages" && _jsx(MessagesList, { state: state }), state.detailOpen && _jsx(PrDetail, { state: state })] })), _jsx(Footer, { state: state })] }));
 }

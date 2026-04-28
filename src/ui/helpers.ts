@@ -1,7 +1,7 @@
 import he from "he";
 import type { AlertSeverity, DiffFile, DiffLine, PullRequestSummary, SecurityAlert, SecuritySortMode } from "../types.js";
 
-export const PR_VIEWS = ["myPullRequests", "needsMyReview", "waitingOnOthers", "watchedAuthor"] as const;
+export const PR_VIEWS = ["myPullRequests", "needsMyReview", "waitingOnOthers", "readyToMerge", "watchedAuthor"] as const;
 export const SEVERITY_RANK: Record<AlertSeverity, number> = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
 export const COMMON_WATCHED_AUTHORS = ["dependabot[bot]"];
 

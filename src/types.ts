@@ -1,10 +1,21 @@
-export type ViewName = "myPullRequests" | "needsMyReview" | "waitingOnOthers" | "watchedAuthor" | "security";
+export type ViewName = "myPullRequests" | "needsMyReview" | "waitingOnOthers" | "readyToMerge" | "watchedAuthor" | "security";
 
 export type AlertSeverity = "critical" | "high" | "medium" | "low" | "unknown";
 export type SecuritySortMode = "severity" | "age";
 
 export type ReviewDecision = "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
 export type CiStatus = "SUCCESS" | "FAILURE" | "ERROR" | "PENDING" | "EXPECTED" | "UNKNOWN";
+
+export type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+export type MergeStateStatus =
+  | "BEHIND"
+  | "BLOCKED"
+  | "CLEAN"
+  | "DIRTY"
+  | "DRAFT"
+  | "HAS_HOOKS"
+  | "UNKNOWN"
+  | "UNSTABLE";
 
 export interface ActivitySnapshot {
   latestActivityAt: string;
@@ -34,6 +45,8 @@ export interface PullRequestSummary {
   ciStatus: CiStatus;
   checkCounts: CheckCounts;
   activity: ActivitySnapshot;
+  mergeable: Mergeable;
+  mergeStateStatus: MergeStateStatus;
 }
 
 export interface TrackedAttentionState {
@@ -49,6 +62,7 @@ export interface TrackedAttentionState {
   needsMyReviewNextCursor?: string | null;
   needsMyReviewTotalCount?: number;
   waitingOnOthers: PullRequestSummary[];
+  readyToMerge: PullRequestSummary[];
   watchedAuthorPullRequests: PullRequestSummary[];
   watchedAuthorHasMore?: boolean;
   watchedAuthorNextCursor?: string | null;

@@ -1,7 +1,8 @@
 import React from "react";
-import { Box, Text, useStdout } from "ink";
+import { Box, Text } from "ink";
 import { formatTimestamp, htmlToText, parseDiff } from "../helpers.js";
 import type { AppState } from "../types.js";
+import { useTerminalSize } from "../useTerminalSize.js";
 
 function truncate(text: string, maxWidth: number): string {
   if (text.length <= maxWidth) return text;
@@ -9,9 +10,7 @@ function truncate(text: string, maxWidth: number): string {
 }
 
 export function PrDetail({ state }: { state: AppState }) {
-  const { stdout } = useStdout();
-  const rows = stdout?.rows ?? 24;
-  const cols = stdout?.columns ?? 120;
+  const { columns: cols, rows } = useTerminalSize();
   const { detailPr: pr, detailData, detailLoading, detailScrollOffset, detailDiff, detailDiffVisible, detailDiffFileIndex } = state;
   if (!pr) return null;
 

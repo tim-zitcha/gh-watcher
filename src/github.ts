@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 
-import type { ActivitySnapshot, AlertSeverity, ChangedFile, CheckRun, CheckCounts, CiStatus, GitHubNotification, NotificationReason, PullRequestDetail, PullRequestSummary, ReviewSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
-import { isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
+import type { ActivitySnapshot, AlertSeverity, ChangedFile, CheckRun, CheckCounts, CiStatus, GitHubNotification, Mergeable, MergeStateStatus, NotificationReason, PullRequestDetail, PullRequestSummary, ReviewSummary, SecurityAlert, TrackedAttentionState } from "./types.js";
+import { isReadyToMerge, isRequestedReviewer, shouldIncludePullRequest, shouldTrackWaitingOnOthers, sortPullRequests } from "./domain.js";
 
 // ---------------------------------------------------------------------------
 // Simple in-memory TTL cache
@@ -67,6 +67,8 @@ const SEARCH_QUERY = `
           isDraft
           updatedAt
           reviewDecision
+          mergeable
+          mergeStateStatus
           repository {
             nameWithOwner
           }
@@ -138,6 +140,8 @@ export interface PullRequestNode {
   isDraft: boolean;
   updatedAt: string;
   reviewDecision: PullRequestSummary["reviewDecision"];
+  mergeable: Mergeable;
+  mergeStateStatus: MergeStateStatus;
   repository: {
     nameWithOwner: string;
   };
@@ -444,6 +448,8 @@ export function mapPullRequestNode(node: PullRequestNode): PullRequestSummary {
     isDraft: node.isDraft,
     updatedAt: node.updatedAt,
     reviewDecision: node.reviewDecision,
+    mergeable: node.mergeable,
+    mergeStateStatus: node.mergeStateStatus,
     requestedReviewers: node.reviewRequests.nodes
       .map((item) => normalizeRequestedReviewer(item.requestedReviewer))
       .filter((reviewer): reviewer is string => Boolean(reviewer)),
@@ -974,10 +980,10 @@ export async function fetchMyPrsData(options: {
   includeDrafts: boolean;
   repositoryScope: string | null;
   cursor?: string | null;
-}): Promise<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
+}): Promise<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; readyToMerge: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }> {
   const { viewerLogin, includeDrafts, repositoryScope } = options;
   const cacheKey = `fetchMyPrsData:${viewerLogin}:${repositoryScope ?? ""}:${includeDrafts}:${options.cursor ?? ""}`;
-  const cached = fetchCache.get<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }>(cacheKey);
+  const cached = fetchCache.get<{ myPullRequests: PullRequestSummary[]; waitingOnOthers: PullRequestSummary[]; readyToMerge: PullRequestSummary[]; hasMore: boolean; nextCursor: string | null; totalCount: number }>(cacheKey);
   if (cached) return cached;
 
   const { pullRequests, hasMore, nextCursor, totalCount } = await fetchPrPage(
@@ -993,7 +999,8 @@ export async function fetchMyPrsData(options: {
   const waitingOnOthers = sortPullRequests(
     myPullRequests.filter((pr) => shouldTrackWaitingOnOthers(pr, viewerLogin))
   );
-  const result = { myPullRequests, waitingOnOthers, hasMore, nextCursor, totalCount };
+  const readyToMerge = sortPullRequests(myPullRequests.filter(isReadyToMerge));
+  const result = { myPullRequests, waitingOnOthers, readyToMerge, hasMore, nextCursor, totalCount };
   fetchCache.set(cacheKey, result, 2 * 60 * 1000);
   return result;
 }
@@ -1063,6 +1070,7 @@ export async function fetchAllViews(options: {
     needsMyReviewNextCursor: needsMyReviewData.nextCursor,
     needsMyReviewTotalCount: needsMyReviewData.totalCount,
     waitingOnOthers: myPrsData.waitingOnOthers,
+    readyToMerge: myPrsData.readyToMerge,
     watchedAuthorPullRequests,
     watchedAuthorHasMore: watchedAuthorSearch.hasMore,
     watchedAuthorNextCursor: watchedAuthorSearch.nextCursor,

@@ -2,6 +2,7 @@
 
 import { loadConfig } from "./config.js";
 import { fetchViewerLogin, fetchViewerOrganizations } from "./github.js";
+import { testNotifications } from "./notify.js";
 
 import { loadState, saveState, updateWatchedAuthors } from "./state.js";
 import type { TrackedAttentionState } from "./types.js";
@@ -18,7 +19,26 @@ function friendlyGhError(err: unknown): string {
   return `Failed to connect to GitHub: ${msg}`;
 }
 
+async function runNotifyTest(): Promise<void> {
+  console.log("Sending test notifications via every available backend...\n");
+  const results = await testNotifications();
+  for (const r of results) {
+    if (r.ok) {
+      console.log(`  ✓ ${r.backend} — dispatched`);
+    } else {
+      console.log(`  ✗ ${r.backend} — ${r.error ?? "failed"}`);
+    }
+  }
+  console.log(
+    "\nIf you didn't see a banner, open System Settings → Notifications and check that Script Editor (osascript), your terminal (Ghostty/iTerm), and terminal-notifier are allowed and Focus is off."
+  );
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes("--test-notify")) {
+    await runNotifyTest();
+    return;
+  }
   const config = await loadConfig(process.argv.slice(2));
   let persistedState = await loadState(config.stateFilePath);
 
@@ -50,6 +70,7 @@ async function main(): Promise<void> {
     myPullRequests: [],
     needsMyReview: [],
     waitingOnOthers: [],
+    readyToMerge: [],
     watchedAuthorPullRequests: [],
     securityAlerts: [],
     securityAlertTotal: 0,
