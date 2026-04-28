@@ -47,7 +47,7 @@ export function SecurityList({ state, hasOrgs }: { state: AppState; hasOrgs: boo
       {visible.map((alert, i) => {
         const selected = scrollOffset + i === selectedRowIndex;
         return (
-          <Text key={`${alert.ghsaId}-${alert.repository}`} inverse={selected}>
+          <Text key={`${alert.repository}-${alert.number}`} inverse={selected}>
             <Text color={severityColor(alert.severity)}>{pad(alert.severity.toUpperCase(), fixedCols.severity)}</Text>
             {" "}{pad(alert.repository, fixedCols.repo)} {pad(alert.package, fixedCols.pkg)} {pad(alert.ecosystem ?? "-", fixedCols.ecosystem)} {pad(alert.cveId ?? "-", fixedCols.cve)} {pad(formatTimestamp(alert.createdAt), fixedCols.opened)} {pad(alert.summary ?? "-", summaryWidth)}
           </Text>
