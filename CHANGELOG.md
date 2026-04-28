@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/tim-zitcha/gh-watcher/compare/v1.2.0...v1.2.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* use stable alert number as React key in SecurityList ([9f1cb75](https://github.com/tim-zitcha/gh-watcher/commit/9f1cb75fa1a9f5e976e9ca6d1e9c6f603706027e))
+
 ## [1.2.0](https://github.com/tim-zitcha/gh-watcher/compare/v1.1.0...v1.2.0) (2026-04-28)
 
 
