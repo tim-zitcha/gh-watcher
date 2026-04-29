@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import { execFile } from "node:child_process";
 import React, { useCallback, useEffect, useReducer, useRef } from "react";
 import { Box, render, useApp, useInput } from "ink";
 import { useTerminalSize } from "./useTerminalSize.js";
@@ -658,12 +659,20 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           ? state.attentionState.notifications
           : state.attentionState.notifications.filter(n => n.unread);
         const n = items[state.selectedRowIndex];
-        if (n?.subject.url) {
-          const webUrl = n.subject.url
-            .replace("https://api.github.com/repos/", "https://github.com/")
-            .replace(/\/pulls\/(\d+)$/, "/pull/$1")
-            .replace(/\/commits\/([0-9a-f]+)$/, "/commit/$1");
-          void open(webUrl);
+        if (n) {
+          let webUrl: string | null = null;
+          if (n.subject.url) {
+            const converted = n.subject.url
+              .replace("https://api.github.com/repos/", "https://github.com/")
+              .replace(/\/pulls\/(\d+)$/, "/pull/$1")
+              .replace(/\/commits\/([0-9a-f]+)$/, "/commit/$1")
+              // CheckSuite has no direct web URL — redirect to Actions tab
+              .replace(/\/check-suites\/\d+$/, "/actions");
+            webUrl = converted;
+          }
+          // Fall back to the repository page
+          if (!webUrl) webUrl = `https://github.com/${n.repository}`;
+          execFile("open", ["-u", webUrl]);
         }
         return;
       }
