@@ -80,6 +80,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
   const previousAttentionRef = useRef<TrackedAttentionState>(options.initialAttentionState);
   const userSettingsRef = useRef<UserSettings>(options.userSettings);
   const lastRefreshedAt = useRef<Partial<Record<AppMode, number>>>({});
+  const isInitialSettingsRender = useRef(true);
 
   // Live-value refs read inside doRefresh so the timer-driven callback never
   // becomes stale. Updated every render by the effect below.
@@ -284,8 +285,13 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist settings whenever they change
+  // Persist settings whenever they change, but skip the initial mount
+  // (initial state may include session-only CLI overrides that must not be written to disk)
   useEffect(() => {
+    if (isInitialSettingsRender.current) {
+      isInitialSettingsRender.current = false;
+      return;
+    }
     const settingsPath = join(dirname(options.config.stateFilePath), "settings.json");
     void saveSettings(settingsPath, state.userSettings);
   }, [state.userSettings, options.config.stateFilePath]);
