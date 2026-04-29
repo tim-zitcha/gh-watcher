@@ -148,6 +148,8 @@ export function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
+    case "UPDATE_SETTINGS":
+      return { ...state, userSettings: action.settings };
     default: return state;
   }
 }
