@@ -5,14 +5,14 @@ import open from "open";
 
 import { buildNotifications } from "../domain.js";
 import {
-  clearFetchCache, extractOrgFromScope, fetchDependabotAlerts, fetchMyPrsData,
+  clearFetchCache, extractOrgFromScope, fetchAccessibleRepos, fetchDependabotAlerts, fetchMyPrsData,
   fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff,
-  fetchPullRequestsAuthoredBy, markNotificationRead, markAllNotificationsRead,
+  fetchPullRequestsAuthoredBy, fetchRepoPullRequests, markNotificationRead, markAllNotificationsRead,
 } from "../github.js";
 import { sendNotifications } from "../notify.js";
 import { markSeen, saveState, updateWatchedAuthors } from "../state.js";
 import type { PersistedState, PullRequestSummary, TrackedAttentionState } from "../types.js";
-import { PR_VIEWS, COMMON_WATCHED_AUTHORS, clampScroll, formatTimestamp, parseDiff, sortSecurityAlerts } from "./helpers.js";
+import { PR_VIEWS, COMMON_WATCHED_AUTHORS, clampScroll, formatTimestamp, groupByRepo, parseDiff, sortSecurityAlerts } from "./helpers.js";
 import { reducer } from "./reducer.js";
 import type { ActiveOverlay, AppMode, AppState, DashboardOptions, ViewKey, WatchedAuthorOption } from "./types.js";
 import { Footer } from "./components/Footer.js";
@@ -22,6 +22,8 @@ import { PrDetail } from "./components/PrDetail.js";
 import { PrList } from "./components/PrList.js";
 import { SecurityList } from "./components/SecurityList.js";
 import { MessagesList } from "./components/MessagesList.js";
+import { RepoList } from "./components/RepoList.js";
+import { RepoDetail } from "./components/RepoDetail.js";
 
 export { DashboardOptions };
 
@@ -60,6 +62,12 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     messagesShowAll: false,
     includeDraftsOverride: null,
     viewScrollState: {},
+    repoListIndex: 0,
+    repoDetailRepo: null,
+    repoSortMode: "activity" as AppState["repoSortMode"],
+    repoDetailPrs: [],
+    repoDetailPrsLoading: false,
+    accessibleRepos: [],
   }));
 
   const isRefreshingRef = useRef(false);
@@ -181,6 +189,18 @@ function Dashboard({ options }: { options: DashboardOptions }) {
         }
       }
 
+      if (target === "repos" || target === "all") {
+        try {
+          const repos = await fetchAccessibleRepos(options.organizations, repositoryScope);
+          // Dispatch separately so this never gets wiped by stale UPDATE_ATTENTION_STATE calls
+          if (refreshGenerationRef.current === generation) {
+            dispatch({ type: "SET_ACCESSIBLE_REPOS", repos });
+          }
+        } catch {
+          // repo list fetch failure is non-fatal
+        }
+      }
+
       next = { ...next, refreshedAt: new Date().toISOString() };
 
       const view = PR_VIEWS[currentPrViewIndexRef.current]!;
@@ -189,6 +209,8 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           ? next.securityAlerts.length
           : modeRef.current === "messages"
           ? next.notifications.length
+          : modeRef.current === "repos"
+          ? 0
           : view === "myPullRequests"
           ? next.myPullRequests.length
           : view === "needsMyReview"
@@ -245,9 +267,13 @@ function Dashboard({ options }: { options: DashboardOptions }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initial fetch on mount
+  // Initial fetch on mount: load current tab first, then everything else
   useEffect(() => {
-    void doRefresh("all");
+    const initialTarget = modeRef.current === "security" ? "security"
+      : modeRef.current === "messages" ? "messages"
+      : modeRef.current === "repos" ? "repos"
+      : "myPrs";
+    void doRefresh(initialTarget).then(() => void doRefresh("all"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -257,6 +283,17 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function openRepoDetail(nameWithOwner: string): Promise<void> {
+    dispatch({ type: "OPEN_REPO_DETAIL", repo: nameWithOwner });
+    const [owner, repo] = nameWithOwner.split("/");
+    try {
+      const prs = await fetchRepoPullRequests(owner!, repo!);
+      dispatch({ type: "SET_REPO_DETAIL_PRS", prs });
+    } catch {
+      dispatch({ type: "SET_REPO_DETAIL_PRS_LOADING", value: false });
+    }
+  }
 
   async function openDetail(pr: PullRequestSummary): Promise<void> {
     detailPrRef.current = pr;
@@ -351,8 +388,22 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     }
   }
 
-  function moveSelection(offset: number): void {
+  function moveSelection(offset: number, repos: ReturnType<typeof groupByRepo>): void {
     const visibleRows = Math.max(1, (termRows) - 9);
+    if (state.mode === "repos") {
+      if (state.repoDetailRepo) {
+        const prs = state.repoDetailPrs;
+        if (prs.length === 0) return;
+        const newIdx = Math.max(0, Math.min(state.selectedRowIndex + offset, prs.length - 1));
+        const newScroll = clampScroll(newIdx, state.tableScrollOffset, visibleRows);
+        dispatch({ type: "SET_SELECTED_ROW", index: newIdx, scrollOffset: newScroll });
+      } else {
+        if (repos.length === 0) return;
+        const newIdx = Math.max(0, Math.min(state.repoListIndex + offset, repos.length - 1));
+        dispatch({ type: "SET_REPO_LIST_INDEX", index: newIdx });
+      }
+      return;
+    }
     if (state.mode === "security") {
       const alerts = sortSecurityAlerts(state.attentionState.securityAlerts, state.securitySortMode);
       if (alerts.length === 0) return;
@@ -454,6 +505,19 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     void doRefresh("all");
   }
 
+  const repos = groupByRepo(
+    [
+      ...state.attentionState.myPullRequests,
+      ...state.attentionState.needsMyReview,
+      ...state.attentionState.waitingOnOthers,
+      ...state.attentionState.readyToMerge,
+    ],
+    state.attentionState.needsMyReview,
+    state.attentionState.securityAlerts,
+    state.repoSortMode,
+    state.accessibleRepos,
+  );
+
   useInput((input, key) => {
     if (state.activeOverlay) return;
 
@@ -469,7 +533,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       if (state.detailOpen && state.focusedPanel === "detail") {
         dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset - 1 });
       } else {
-        moveSelection(-1);
+        moveSelection(-1, repos);
         if (state.detailOpen) {
           const pr = getPrsForCurrentView()[Math.max(0, state.selectedRowIndex - 1)];
           if (pr) void openDetail(pr);
@@ -481,7 +545,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       if (state.detailOpen && state.focusedPanel === "detail") {
         dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset + 1 });
       } else {
-        moveSelection(1);
+        moveSelection(1, repos);
         if (state.detailOpen) {
           const prs = getPrsForCurrentView();
           const pr = prs[Math.min(prs.length - 1, state.selectedRowIndex + 1)];
@@ -491,7 +555,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       return;
     }
     if (input === "k") {
-      moveSelection(-1);
+      moveSelection(-1, repos);
       if (state.detailOpen && state.focusedPanel === "list") {
         const pr = getPrsForCurrentView()[Math.max(0, state.selectedRowIndex - 1)];
         if (pr) void openDetail(pr);
@@ -499,7 +563,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       return;
     }
     if (input === "j") {
-      moveSelection(1);
+      moveSelection(1, repos);
       if (state.detailOpen && state.focusedPanel === "list") {
         const prs = getPrsForCurrentView();
         const pr = prs[Math.min(prs.length - 1, state.selectedRowIndex + 1)];
@@ -509,12 +573,12 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     }
     if (key.pageUp || (key.ctrl && input === "u")) {
       if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset - 10 });
-      else moveSelection(-10);
+      else moveSelection(-10, repos);
       return;
     }
     if (key.pageDown || (key.ctrl && input === "d")) {
       if (state.detailOpen) dispatch({ type: "SET_DETAIL_SCROLL", offset: state.detailScrollOffset + 10 });
-      else moveSelection(10);
+      else moveSelection(10, repos);
       return;
     }
     if (input === "g") {
@@ -529,6 +593,16 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     }
 
     if (key.return) {
+      if (state.mode === "repos") {
+        if (state.repoDetailRepo) {
+          const pr = state.repoDetailPrs[state.selectedRowIndex];
+          if (pr) void openDetail(pr);
+        } else {
+          const repo = repos[state.repoListIndex];
+          if (repo) void openRepoDetail(repo.nameWithOwner);
+        }
+        return;
+      }
       if (state.mode === "messages") {
         const items = state.messagesShowAll
           ? state.attentionState.notifications
@@ -555,13 +629,23 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       return;
     }
     if (key.escape) {
+      if (state.mode === "repos" && state.repoDetailRepo) {
+        dispatch({ type: "CLOSE_REPO_DETAIL" });
+        return;
+      }
       if (state.detailOpen) dispatch({ type: "CLOSE_DETAIL" });
       return;
     }
     if (key.tab && state.mode === "pr") {
-      const next = (state.currentPrViewIndex + 1) % PR_VIEWS.length;
-      if (state.detailOpen) dispatch({ type: "CLOSE_DETAIL" });
-      dispatch({ type: "SET_VIEW_INDEX", index: next });
+      if (key.shift) {
+        const prev = (state.currentPrViewIndex - 1 + PR_VIEWS.length) % PR_VIEWS.length;
+        if (state.detailOpen) dispatch({ type: "CLOSE_DETAIL" });
+        dispatch({ type: "SET_VIEW_INDEX", index: prev });
+      } else {
+        const next = (state.currentPrViewIndex + 1) % PR_VIEWS.length;
+        if (state.detailOpen) dispatch({ type: "CLOSE_DETAIL" });
+        dispatch({ type: "SET_VIEW_INDEX", index: next });
+      }
       return;
     }
     if (input === "1") {
@@ -576,12 +660,24 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       dispatch({ type: "SET_MODE", mode: "messages" });
       return;
     }
+    if (input === "4" || input === "p") {
+      dispatch({ type: "SET_MODE", mode: "repos" });
+      if (state.accessibleRepos.length === 0 && !state.isRefreshing) {
+        void doRefresh("repos");
+      }
+      return;
+    }
     if (input === "a" && state.mode === "messages") {
       dispatch({ type: "SET_MESSAGES_SHOW_ALL", value: !state.messagesShowAll });
       return;
     }
     if (input === "s" && state.mode === "security") {
       dispatch({ type: "SET_SECURITY_SORT", sort: state.securitySortMode === "severity" ? "age" : "severity" });
+      return;
+    }
+    if (input === "s" && state.mode === "repos") {
+      const next = state.repoSortMode === "activity" ? "alerts" : state.repoSortMode === "alerts" ? "name" : "activity";
+      dispatch({ type: "SET_REPO_SORT", sort: next });
       return;
     }
     if (input === "/") { void openAuthorPicker(); return; }
@@ -617,7 +713,10 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     }
     if (input === "r") {
       clearFetchCache();
-      const target = modeRef.current === "security" ? "security" : modeRef.current === "messages" ? "messages" : currentViewKey();
+      const target = modeRef.current === "security" ? "security"
+        : modeRef.current === "messages" ? "messages"
+        : modeRef.current === "repos" ? "repos"
+        : currentViewKey();
       void doRefresh(target);
       return;
     }
@@ -693,6 +792,11 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           {state.mode === "pr" && <PrList state={state} narrow={state.detailOpen} />}
           {state.mode === "security" && <SecurityList state={state} hasOrgs={options.organizations.length > 0} />}
           {state.mode === "messages" && <MessagesList state={state} />}
+          {state.mode === "repos" && !state.repoDetailRepo && <RepoList state={state} repos={repos} />}
+          {state.mode === "repos" && state.repoDetailRepo && (() => {
+            const repo = repos.find(r => r.nameWithOwner === state.repoDetailRepo);
+            return repo ? <RepoDetail state={state} repo={repo} /> : null;
+          })()}
           {state.detailOpen && <PrDetail state={state} />}
         </Box>
       )}

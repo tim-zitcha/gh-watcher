@@ -10,7 +10,7 @@ export function Header({ state }: { state: AppState }) {
     <Box flexDirection="column">
       <StatusBar state={state} />
       <ModeStrip state={state} />
-      <SubNav state={state} />
+      {state.mode === "pr" && <SubNav state={state} />}
     </Box>
   );
 }

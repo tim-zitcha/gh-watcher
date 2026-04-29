@@ -13,7 +13,8 @@ export function ModeStrip({ state }: { state: AppState }) {
   const prActive = mode === "pr";
   const secActive = mode === "security";
   const msgActive = mode === "messages";
-  const borderColor = secActive ? "red" : msgActive ? "blue" : "cyan";
+  const repoActive = mode === "repos";
+  const borderColor = secActive ? "red" : msgActive ? "blue" : repoActive ? "green" : "cyan";
 
   return (
     <Box borderStyle="single" borderColor={borderColor} paddingX={1}>
@@ -54,6 +55,15 @@ export function ModeStrip({ state }: { state: AppState }) {
         ? <Text color="blue">({unreadCount} unread)</Text>
         : <Text dimColor>(0)</Text>
       }
+
+      <Text>{"   "}</Text>
+
+      <Text bold={repoActive} color={repoActive ? "green" : "gray"}>
+        <Text dimColor={!repoActive}>[</Text>
+        <Text color={repoActive ? "green" : "gray"}>4</Text>
+        <Text dimColor={!repoActive}>]</Text>
+        {" "}Repos
+      </Text>
     </Box>
   );
 }

@@ -755,6 +755,103 @@ async function fetchDependabotAlertPage(org: string): Promise<SecurityAlert[]> {
   }));
 }
 
+const ORG_REPOS_QUERY = `
+  query OrgRepos($org: String!, $after: String) {
+    organization(login: $org) {
+      repositories(first: 100, after: $after, orderBy: { field: PUSHED_AT, direction: DESC }, isFork: false) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          nameWithOwner
+          isArchived
+          pullRequests(states: [OPEN]) { totalCount }
+        }
+      }
+    }
+  }
+`;
+
+const VIEWER_REPOS_QUERY = `
+  query ViewerRepos($after: String) {
+    viewer {
+      repositories(first: 100, after: $after, orderBy: { field: PUSHED_AT, direction: DESC }, isFork: false, affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          nameWithOwner
+          isArchived
+          pullRequests(states: [OPEN]) { totalCount }
+        }
+      }
+    }
+  }
+`;
+
+export interface AccessibleRepo { nameWithOwner: string; openPrCount: number; }
+interface RepoNode { nameWithOwner: string; isArchived: boolean; pullRequests: { totalCount: number } }
+interface OrgReposResponse { data: { organization: { repositories: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: (RepoNode | null)[] } } } }
+interface ViewerReposResponse { data: { viewer: { repositories: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: (RepoNode | null)[] } } } }
+
+async function fetchOrgRepos(org: string): Promise<AccessibleRepo[]> {
+  const repos: AccessibleRepo[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const payload = await runGhApi(ORG_REPOS_QUERY, { org, after });
+    const parsed = parseGraphQL<OrgReposResponse>(payload, "OrgRepos");
+    const conn = parsed.data.organization?.repositories;
+    if (!conn) break;
+    for (const node of conn.nodes) {
+      if (node && !node.isArchived) repos.push({ nameWithOwner: node.nameWithOwner, openPrCount: node.pullRequests.totalCount });
+    }
+    if (!conn.pageInfo.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return repos;
+}
+
+async function fetchViewerRepos(): Promise<AccessibleRepo[]> {
+  const repos: AccessibleRepo[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const payload = await runGhApi(VIEWER_REPOS_QUERY, { after });
+    const parsed = parseGraphQL<ViewerReposResponse>(payload, "ViewerRepos");
+    const conn = parsed.data.viewer?.repositories;
+    if (!conn) break;
+    for (const node of conn.nodes) {
+      if (node && !node.isArchived) repos.push({ nameWithOwner: node.nameWithOwner, openPrCount: node.pullRequests.totalCount });
+    }
+    if (!conn.pageInfo.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return repos;
+}
+
+export async function fetchAccessibleRepos(orgs: string[], repositoryScope: string | null): Promise<AccessibleRepo[]> {
+  const cacheKey = `fetchAccessibleRepos:${repositoryScope ?? "all"}:${orgs.join(",")}`;
+  const cached = fetchCache.get<AccessibleRepo[]>(cacheKey);
+  if (cached) return cached;
+
+  let repos: AccessibleRepo[];
+  const scopedOrg = repositoryScope?.startsWith("org:") ? repositoryScope.slice(4) : null;
+  if (scopedOrg) {
+    repos = await fetchOrgRepos(scopedOrg);
+  } else if (orgs.length > 0) {
+    const [orgResults, viewerRepos] = await Promise.all([
+      Promise.all(orgs.map(fetchOrgRepos)),
+      fetchViewerRepos(),
+    ]);
+    const seen = new Set<string>();
+    repos = [...orgResults.flat(), ...viewerRepos].filter(r => {
+      if (seen.has(r.nameWithOwner)) return false;
+      seen.add(r.nameWithOwner);
+      return true;
+    });
+  } else {
+    repos = await fetchViewerRepos();
+  }
+
+  fetchCache.set(cacheKey, repos, 15 * 60 * 1000);
+  return repos;
+}
+
 export async function fetchDependabotAlerts(org: string): Promise<{ alerts: SecurityAlert[]; total: number }> {
   const cacheKey = `fetchDependabotAlerts:${org}`;
   const cached = fetchCache.get<{ alerts: SecurityAlert[]; total: number }>(cacheKey);
@@ -912,6 +1009,25 @@ interface PullRequestDetailResponse {
       } | null;
     } | null;
   };
+}
+
+export async function fetchRepoPullRequests(owner: string, repo: string): Promise<PullRequestSummary[]> {
+  const cacheKey = `fetchRepoPullRequests:${owner}/${repo}`;
+  const cached = fetchCache.get<PullRequestSummary[]>(cacheKey);
+  if (cached) return cached;
+
+  const searchQuery = `repo:${owner}/${repo} is:pr is:open`;
+  const prs: PullRequestSummary[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const result = await fetchPrPage(searchQuery, cursor);
+    prs.push(...result.pullRequests);
+    if (!result.hasMore) break;
+    cursor = result.nextCursor;
+  }
+
+  fetchCache.set(cacheKey, prs, 2 * 60 * 1000);
+  return prs;
 }
 
 export async function fetchPullRequestDetail(

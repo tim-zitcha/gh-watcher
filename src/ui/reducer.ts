@@ -95,6 +95,20 @@ export function reducer(state: AppState, action: Action): AppState {
     }
     case "SET_LOADING_MORE":
       return { ...state, isLoadingMore: action.value };
+    case "SET_REPO_LIST_INDEX":
+      return { ...state, repoListIndex: action.index };
+    case "OPEN_REPO_DETAIL":
+      return { ...state, repoDetailRepo: action.repo, selectedRowIndex: 0, tableScrollOffset: 0, repoDetailPrs: [], repoDetailPrsLoading: true };
+    case "CLOSE_REPO_DETAIL":
+      return { ...state, repoDetailRepo: null, selectedRowIndex: state.repoListIndex, tableScrollOffset: 0, repoDetailPrs: [], repoDetailPrsLoading: false };
+    case "SET_REPO_SORT":
+      return { ...state, repoSortMode: action.sort, repoListIndex: 0 };
+    case "SET_REPO_DETAIL_PRS":
+      return { ...state, repoDetailPrs: action.prs, repoDetailPrsLoading: false };
+    case "SET_REPO_DETAIL_PRS_LOADING":
+      return { ...state, repoDetailPrsLoading: action.value };
+    case "SET_ACCESSIBLE_REPOS":
+      return { ...state, accessibleRepos: action.repos };
     case "APPEND_MY_PRS": {
       const a = state.attentionState;
       return {

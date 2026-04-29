@@ -1,5 +1,7 @@
 import he from "he";
 import type { AlertSeverity, DiffFile, DiffLine, PullRequestSummary, SecurityAlert, SecuritySortMode } from "../types.js";
+import type { AccessibleRepo } from "../github.js";
+import type { RepoSortMode, RepoSummary } from "./types.js";
 
 export const PR_VIEWS = ["myPullRequests", "needsMyReview", "waitingOnOthers", "readyToMerge", "watchedAuthor"] as const;
 export const SEVERITY_RANK: Record<AlertSeverity, number> = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
@@ -123,4 +125,76 @@ export function parseDiff(raw: string): DiffFile[] {
   }
 
   return files;
+}
+
+export function groupByRepo(
+  prs: PullRequestSummary[],
+  needsReview: PullRequestSummary[],
+  alerts: SecurityAlert[],
+  sort: RepoSortMode = "activity",
+  accessibleRepos: AccessibleRepo[] = [],
+): RepoSummary[] {
+  const map = new Map<string, RepoSummary>();
+
+  // Seed map with all known repos using their real total open PR count
+  for (const repo of accessibleRepos) {
+    map.set(repo.nameWithOwner, {
+      nameWithOwner: repo.nameWithOwner,
+      openPrCount: repo.openPrCount,
+      needsReviewCount: 0,
+      waitingCount: 0,
+      alertCount: 0,
+      criticalCount: 0,
+      prs: [],
+      alerts: [],
+    });
+  }
+
+  const needsReviewSet = new Set(needsReview.map(p => `${p.repository}#${p.number}`));
+
+  // Enrich with user-specific PR data (needs review counts, local PR list for detail drill-in)
+  for (const pr of prs) {
+    const key = pr.repository;
+    if (!map.has(key)) {
+      map.set(key, { nameWithOwner: key, openPrCount: 0, needsReviewCount: 0, waitingCount: 0, alertCount: 0, criticalCount: 0, prs: [], alerts: [] });
+    }
+    const entry = map.get(key)!;
+    if (!entry.prs.find(p => p.number === pr.number)) {
+      entry.prs.push(pr);
+      // Only bump openPrCount if not seeded from accessibleRepos (avoid double-counting)
+      if (accessibleRepos.length === 0) entry.openPrCount++;
+      if (needsReviewSet.has(`${pr.repository}#${pr.number}`)) entry.needsReviewCount++;
+    }
+  }
+
+  for (const alert of alerts) {
+    const key = alert.repository;
+    if (!map.has(key)) {
+      map.set(key, { nameWithOwner: key, openPrCount: 0, needsReviewCount: 0, waitingCount: 0, alertCount: 0, criticalCount: 0, prs: [], alerts: [] });
+    }
+    const entry = map.get(key)!;
+    entry.alerts.push(alert);
+    entry.alertCount++;
+    if (alert.severity === "critical") entry.criticalCount++;
+  }
+
+  const entries = [...map.values()];
+  if (sort === "name") {
+    return entries.sort((a, b) => a.nameWithOwner.localeCompare(b.nameWithOwner));
+  }
+  if (sort === "alerts") {
+    return entries.sort((a, b) => {
+      if (b.criticalCount !== a.criticalCount) return b.criticalCount - a.criticalCount;
+      if (b.alertCount !== a.alertCount) return b.alertCount - a.alertCount;
+      return a.nameWithOwner.localeCompare(b.nameWithOwner);
+    });
+  }
+  // activity (default): needs review → open PRs → alerts → name
+  return entries.sort((a, b) => {
+    if (b.needsReviewCount !== a.needsReviewCount) return b.needsReviewCount - a.needsReviewCount;
+    if (b.openPrCount !== a.openPrCount) return b.openPrCount - a.openPrCount;
+    if (b.criticalCount !== a.criticalCount) return b.criticalCount - a.criticalCount;
+    if (b.alertCount !== a.alertCount) return b.alertCount - a.alertCount;
+    return a.nameWithOwner.localeCompare(b.nameWithOwner);
+  });
 }

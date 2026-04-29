@@ -38,12 +38,19 @@ export function SecurityList({ state, hasOrgs }: { state: AppState; hasOrgs: boo
   const fixedTotal = Object.values(fixedCols).reduce((a, b) => a + b, 0) + 5;
   const summaryWidth = Math.max(20, availWidth - fixedTotal);
 
+  const isLoading = state.isRefreshing && alerts.length === 0;
+
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="cyan" flexGrow={1}>
       <Text bold>
         {pad("Severity", fixedCols.severity)} {pad("Repo", fixedCols.repo)} {pad("Package", fixedCols.pkg)} {pad("Ecosystem", fixedCols.ecosystem)} {pad("CVE", fixedCols.cve)} {pad("Opened", fixedCols.opened)} {pad("Summary", summaryWidth)}
       </Text>
-      <Text dimColor>Showing {scrollOffset + 1}-{scrollOffset + visible.length} of {alerts.length} · sort: {securitySortMode}</Text>
+      {isLoading
+        ? <Text dimColor>Loading…</Text>
+        : <Text dimColor>Showing {scrollOffset + 1}-{scrollOffset + visible.length} of {alerts.length} · sort: {securitySortMode}</Text>
+      }
+      {isLoading && <Text dimColor>  Fetching security alerts…</Text>}
+      {!isLoading && alerts.length === 0 && <Text dimColor>  No open security alerts.</Text>}
       {visible.map((alert, i) => {
         const selected = scrollOffset + i === selectedRowIndex;
         return (

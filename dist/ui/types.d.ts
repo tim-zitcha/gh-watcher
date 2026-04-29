@@ -1,7 +1,19 @@
-import type { AppConfig, PersistedState, PullRequestDetail, PullRequestSummary, SecuritySortMode, TrackedAttentionState } from "../types.js";
-export type AppMode = "pr" | "security" | "messages";
+import type { AccessibleRepo } from "../github.js";
+import type { AppConfig, PersistedState, PullRequestDetail, PullRequestSummary, SecurityAlert, SecuritySortMode, TrackedAttentionState } from "../types.js";
+export type AppMode = "pr" | "security" | "messages" | "repos";
+export type RepoSortMode = "activity" | "alerts" | "name";
 export type ActiveOverlay = "author" | "scope" | "custom" | null;
-export type ViewKey = "myPrs" | "needsMyReview" | "watchedAuthor" | "security" | "messages";
+export type ViewKey = "myPrs" | "needsMyReview" | "watchedAuthor" | "security" | "messages" | "repos";
+export interface RepoSummary {
+    nameWithOwner: string;
+    openPrCount: number;
+    needsReviewCount: number;
+    waitingCount: number;
+    alertCount: number;
+    criticalCount: number;
+    prs: PullRequestSummary[];
+    alerts: SecurityAlert[];
+}
 export interface WatchedAuthorOption {
     label: string;
     value: string | null;
@@ -43,6 +55,12 @@ export interface AppState {
         selectedRowIndex: number;
         tableScrollOffset: number;
     }>>;
+    repoListIndex: number;
+    repoDetailRepo: string | null;
+    repoSortMode: RepoSortMode;
+    repoDetailPrs: PullRequestSummary[];
+    repoDetailPrsLoading: boolean;
+    accessibleRepos: AccessibleRepo[];
 }
 export type Action = {
     type: "SET_MODE";
@@ -139,4 +157,24 @@ export type Action = {
     type: "MARK_ALL_NOTIFICATIONS_READ";
 } | {
     type: "TOGGLE_DRAFTS_OVERRIDE";
+} | {
+    type: "SET_REPO_LIST_INDEX";
+    index: number;
+} | {
+    type: "OPEN_REPO_DETAIL";
+    repo: string;
+} | {
+    type: "CLOSE_REPO_DETAIL";
+} | {
+    type: "SET_REPO_SORT";
+    sort: RepoSortMode;
+} | {
+    type: "SET_REPO_DETAIL_PRS";
+    prs: PullRequestSummary[];
+} | {
+    type: "SET_REPO_DETAIL_PRS_LOADING";
+    value: boolean;
+} | {
+    type: "SET_ACCESSIBLE_REPOS";
+    repos: AccessibleRepo[];
 };

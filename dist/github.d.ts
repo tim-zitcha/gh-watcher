@@ -79,10 +79,16 @@ export declare function fetchPullRequestsAuthoredBy(options: {
     nextCursor: string | null;
     totalCount: number;
 }>;
+export interface AccessibleRepo {
+    nameWithOwner: string;
+    openPrCount: number;
+}
+export declare function fetchAccessibleRepos(orgs: string[], repositoryScope: string | null): Promise<AccessibleRepo[]>;
 export declare function fetchDependabotAlerts(org: string): Promise<{
     alerts: SecurityAlert[];
     total: number;
 }>;
+export declare function fetchRepoPullRequests(owner: string, repo: string): Promise<PullRequestSummary[]>;
 export declare function fetchPullRequestDetail(owner: string, repo: string, number: number): Promise<PullRequestDetail>;
 export declare function extractOrgFromScope(repositoryScope: string | null): string | null;
 export declare function fetchMyPrsData(options: {

@@ -472,6 +472,101 @@ async function fetchDependabotAlertPage(org) {
         url: alert.html_url
     }));
 }
+const ORG_REPOS_QUERY = `
+  query OrgRepos($org: String!, $after: String) {
+    organization(login: $org) {
+      repositories(first: 100, after: $after, orderBy: { field: PUSHED_AT, direction: DESC }, isFork: false) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          nameWithOwner
+          isArchived
+          pullRequests(states: [OPEN]) { totalCount }
+        }
+      }
+    }
+  }
+`;
+const VIEWER_REPOS_QUERY = `
+  query ViewerRepos($after: String) {
+    viewer {
+      repositories(first: 100, after: $after, orderBy: { field: PUSHED_AT, direction: DESC }, isFork: false, affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          nameWithOwner
+          isArchived
+          pullRequests(states: [OPEN]) { totalCount }
+        }
+      }
+    }
+  }
+`;
+async function fetchOrgRepos(org) {
+    const repos = [];
+    let after = null;
+    for (let page = 0; page < 10; page++) {
+        const payload = await runGhApi(ORG_REPOS_QUERY, { org, after });
+        const parsed = parseGraphQL(payload, "OrgRepos");
+        const conn = parsed.data.organization?.repositories;
+        if (!conn)
+            break;
+        for (const node of conn.nodes) {
+            if (node && !node.isArchived)
+                repos.push({ nameWithOwner: node.nameWithOwner, openPrCount: node.pullRequests.totalCount });
+        }
+        if (!conn.pageInfo.hasNextPage)
+            break;
+        after = conn.pageInfo.endCursor;
+    }
+    return repos;
+}
+async function fetchViewerRepos() {
+    const repos = [];
+    let after = null;
+    for (let page = 0; page < 10; page++) {
+        const payload = await runGhApi(VIEWER_REPOS_QUERY, { after });
+        const parsed = parseGraphQL(payload, "ViewerRepos");
+        const conn = parsed.data.viewer?.repositories;
+        if (!conn)
+            break;
+        for (const node of conn.nodes) {
+            if (node && !node.isArchived)
+                repos.push({ nameWithOwner: node.nameWithOwner, openPrCount: node.pullRequests.totalCount });
+        }
+        if (!conn.pageInfo.hasNextPage)
+            break;
+        after = conn.pageInfo.endCursor;
+    }
+    return repos;
+}
+export async function fetchAccessibleRepos(orgs, repositoryScope) {
+    const cacheKey = `fetchAccessibleRepos:${repositoryScope ?? "all"}:${orgs.join(",")}`;
+    const cached = fetchCache.get(cacheKey);
+    if (cached)
+        return cached;
+    let repos;
+    const scopedOrg = repositoryScope?.startsWith("org:") ? repositoryScope.slice(4) : null;
+    if (scopedOrg) {
+        repos = await fetchOrgRepos(scopedOrg);
+    }
+    else if (orgs.length > 0) {
+        const [orgResults, viewerRepos] = await Promise.all([
+            Promise.all(orgs.map(fetchOrgRepos)),
+            fetchViewerRepos(),
+        ]);
+        const seen = new Set();
+        repos = [...orgResults.flat(), ...viewerRepos].filter(r => {
+            if (seen.has(r.nameWithOwner))
+                return false;
+            seen.add(r.nameWithOwner);
+            return true;
+        });
+    }
+    else {
+        repos = await fetchViewerRepos();
+    }
+    fetchCache.set(cacheKey, repos, 15 * 60 * 1000);
+    return repos;
+}
 export async function fetchDependabotAlerts(org) {
     const cacheKey = `fetchDependabotAlerts:${org}`;
     const cached = fetchCache.get(cacheKey);
@@ -560,6 +655,24 @@ const PULL_REQUEST_DETAIL_QUERY = `
     }
   }
 `;
+export async function fetchRepoPullRequests(owner, repo) {
+    const cacheKey = `fetchRepoPullRequests:${owner}/${repo}`;
+    const cached = fetchCache.get(cacheKey);
+    if (cached)
+        return cached;
+    const searchQuery = `repo:${owner}/${repo} is:pr is:open`;
+    const prs = [];
+    let cursor = null;
+    for (let page = 0; page < 5; page++) {
+        const result = await fetchPrPage(searchQuery, cursor);
+        prs.push(...result.pullRequests);
+        if (!result.hasMore)
+            break;
+        cursor = result.nextCursor;
+    }
+    fetchCache.set(cacheKey, prs, 2 * 60 * 1000);
+    return prs;
+}
 export async function fetchPullRequestDetail(owner, repo, number) {
     const payload = await runGhApi(PULL_REQUEST_DETAIL_QUERY, { owner, repo, number });
     const parsed = parseGraphQL(payload, "PullRequestDetail");
