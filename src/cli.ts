@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
+import { dirname, join } from "node:path";
 import { loadConfig } from "./config.js";
 import { fetchViewerLogin, fetchViewerOrganizations } from "./github.js";
 import { testNotifications } from "./notify.js";
 
 import { loadState, saveState, updateWatchedAuthors } from "./state.js";
-import { DEFAULT_SETTINGS, loadSettings } from "./settings.js";
+import { loadSettings } from "./settings.js";
 import type { TrackedAttentionState } from "./types.js";
 import { runDashboard } from "./ui.js";
 
@@ -41,8 +42,21 @@ async function main(): Promise<void> {
     return;
   }
   const config = await loadConfig(process.argv.slice(2));
-  const settingsFilePath = config.stateFilePath.replace("state.json", "settings.json");
-  const userSettings = await loadSettings(settingsFilePath).catch(() => DEFAULT_SETTINGS);
+  const settingsPath = join(dirname(config.stateFilePath), "settings.json");
+  let userSettings = await loadSettings(settingsPath);
+
+  // CLI flags override persisted settings for this session only
+  if (!config.notificationsEnabled) {
+    userSettings = { ...userSettings, notifications: { enabled: false } };
+  }
+  // --refresh-minutes overrides pollMinutes for all sources
+  if (process.argv.some(a => a.startsWith("--refresh-minutes"))) {
+    const sources = Object.fromEntries(
+      (Object.keys(userSettings.sources) as Array<keyof typeof userSettings.sources>)
+        .map(m => [m, { ...userSettings.sources[m], pollMinutes: config.refreshMinutes }])
+    ) as typeof userSettings.sources;
+    userSettings = { ...userSettings, sources };
+  }
   let persistedState = await loadState(config.stateFilePath);
 
   let viewerLogin: string;
