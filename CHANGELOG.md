@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3.0](https://github.com/tim-zitcha/gh-watcher/compare/v1.2.1...v1.3.0) (2026-04-29)
+
+
+### Features
+
+* add [,] settings hint to footer ([4357363](https://github.com/tim-zitcha/gh-watcher/commit/43573637732dcf8c93a4de294b27c8b124038333))
+* add repos mode with RepoList/RepoDetail views and shift+tab navigation ([cb76108](https://github.com/tim-zitcha/gh-watcher/commit/cb76108873d120689ad3819b2af320cbf79d9256))
+* add SettingsOverlay component ([9922dca](https://github.com/tim-zitcha/gh-watcher/commit/9922dca8e095bf77c22c3a380ca3c55323c8ec04))
+* add UserSettings type, loadSettings, saveSettings ([88f9228](https://github.com/tim-zitcha/gh-watcher/commit/88f9228318222ee23fa902c8534f40b34551c4e1))
+* extend types for UserSettings — ActiveOverlay, DashboardOptions, AppState, Action ([a52cb82](https://github.com/tim-zitcha/gh-watcher/commit/a52cb82fb86ce745a5509de7f8ed51c27cf61c63))
+* handle UPDATE_SETTINGS in reducer ([1bd1aca](https://github.com/tim-zitcha/gh-watcher/commit/1bd1acaee442c8fce2cc86a74b81e013cbbbe8b8))
+* load settings in cli.ts, apply CLI overrides ([606f097](https://github.com/tim-zitcha/gh-watcher/commit/606f09782fd747615e1b120d67af9318110a920e))
+* ModeStrip hides disabled modes, numeric shortcuts renumber dynamically ([58d0e69](https://github.com/tim-zitcha/gh-watcher/commit/58d0e69aede7026d3afd40a669850efaf4bade0d))
+* per-source polling, settings state, , key binding, save side effect ([721cba4](https://github.com/tim-zitcha/gh-watcher/commit/721cba462e47045f52a13ad663360454cc8e865e))
+* skip disabled sources on startup and fix notification URL conversion ([7258dae](https://github.com/tim-zitcha/gh-watcher/commit/7258dae66d6ab07dadf42c6fac9596f12a599455))
+* wire SettingsOverlay into Overlays ([10dc06d](https://github.com/tim-zitcha/gh-watcher/commit/10dc06dff3b73b9e64daebb39ce657e261f99727))
+
+
+### Bug Fixes
+
+* skip persisting settings on mount to prevent CLI overrides from writing to settings.json ([e7610a0](https://github.com/tim-zitcha/gh-watcher/commit/e7610a0133c27935231802ab33925580b5ca3f4c))
+* use execFile open -u for notification URLs to force browser open ([8024766](https://github.com/tim-zitcha/gh-watcher/commit/80247660f0e41f32a52c0ad2379400917c928dc6))
+* wire userSettings into Dashboard and fix CI lint error ([58ce46d](https://github.com/tim-zitcha/gh-watcher/commit/58ce46d7fc97e4d8edc32532a69300fce09e06bc))
+* wrap bare string in Text component in ModeStrip ([e7c55a2](https://github.com/tim-zitcha/gh-watcher/commit/e7c55a2f49ff1bd69f5747ad9a83791f878ff9d5))
+
 ## [1.2.1](https://github.com/tim-zitcha/gh-watcher/compare/v1.2.0...v1.2.1) (2026-04-28)
 
 
