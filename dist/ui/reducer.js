@@ -144,6 +144,8 @@ export function reducer(state, action) {
                 },
             };
         }
+        case "UPDATE_SETTINGS":
+            return { ...state, userSettings: action.settings };
         default: return state;
     }
 }

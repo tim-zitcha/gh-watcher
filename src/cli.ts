@@ -5,6 +5,7 @@ import { fetchViewerLogin, fetchViewerOrganizations } from "./github.js";
 import { testNotifications } from "./notify.js";
 
 import { loadState, saveState, updateWatchedAuthors } from "./state.js";
+import { DEFAULT_SETTINGS, loadSettings } from "./settings.js";
 import type { TrackedAttentionState } from "./types.js";
 import { runDashboard } from "./ui.js";
 
@@ -40,6 +41,8 @@ async function main(): Promise<void> {
     return;
   }
   const config = await loadConfig(process.argv.slice(2));
+  const settingsFilePath = config.stateFilePath.replace("state.json", "settings.json");
+  const userSettings = await loadSettings(settingsFilePath).catch(() => DEFAULT_SETTINGS);
   let persistedState = await loadState(config.stateFilePath);
 
   let viewerLogin: string;
@@ -83,7 +86,8 @@ async function main(): Promise<void> {
     config,
     organizations,
     initialState: persistedState,
-    initialAttentionState
+    initialAttentionState,
+    userSettings
   });
 }
 

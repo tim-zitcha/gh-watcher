@@ -3,6 +3,7 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
+import { SettingsOverlay } from "./SettingsOverlay.js";
 export function AuthorPicker({ options, onSelect, onCancel }) {
     useInput((_, key) => { if (key.escape)
         onCancel(); });
@@ -21,6 +22,6 @@ export function CustomUserInput({ initial, onSubmit, onCancel }) {
         onCancel(); });
     return (_jsxs(Box, { flexDirection: "column", borderStyle: "single", borderColor: "cyan", paddingX: 1, width: 50, children: [_jsx(Text, { bold: true, children: " Custom Author " }), _jsx(TextInput, { focus: true, value: value, onChange: setValue, onSubmit: (v) => onSubmit(v.trim() || initial) })] }));
 }
-export function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, onScopeSelect, onCustomUser, onCancel }) {
-    return (_jsxs(_Fragment, { children: [state.activeOverlay === "author" && (_jsx(AuthorPicker, { options: authorOptions, onSelect: onAuthorSelect, onCancel: onCancel })), state.activeOverlay === "scope" && (_jsx(ScopePicker, { options: scopeOptions, onSelect: onScopeSelect, onCancel: onCancel })), state.activeOverlay === "custom" && (_jsx(CustomUserInput, { initial: state.attentionState.watchedAuthor ?? state.attentionState.viewerLogin, onSubmit: onCustomUser, onCancel: onCancel }))] }));
+export function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, onScopeSelect, onCustomUser, onCancel, userSettings, onSettingsChange, onSettingsClose }) {
+    return (_jsxs(_Fragment, { children: [state.activeOverlay === "author" && (_jsx(AuthorPicker, { options: authorOptions, onSelect: onAuthorSelect, onCancel: onCancel })), state.activeOverlay === "scope" && (_jsx(ScopePicker, { options: scopeOptions, onSelect: onScopeSelect, onCancel: onCancel })), state.activeOverlay === "custom" && (_jsx(CustomUserInput, { initial: state.attentionState.watchedAuthor ?? state.attentionState.viewerLogin, onSubmit: onCustomUser, onCancel: onCancel })), state.activeOverlay === "settings" && (_jsx(SettingsOverlay, { settings: userSettings, onChange: onSettingsChange, onClose: onSettingsClose }))] }));
 }

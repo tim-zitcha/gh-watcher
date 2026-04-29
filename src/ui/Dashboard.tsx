@@ -11,6 +11,8 @@ import {
 } from "../github.js";
 import { sendNotifications } from "../notify.js";
 import { markSeen, saveState, updateWatchedAuthors } from "../state.js";
+import { saveSettings } from "../settings.js";
+import type { UserSettings } from "../settings.js";
 import type { PersistedState, PullRequestSummary, TrackedAttentionState } from "../types.js";
 import { PR_VIEWS, COMMON_WATCHED_AUTHORS, clampScroll, formatTimestamp, groupByRepo, parseDiff, sortSecurityAlerts } from "./helpers.js";
 import { reducer } from "./reducer.js";
@@ -68,6 +70,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     repoDetailPrs: [],
     repoDetailPrsLoading: false,
     accessibleRepos: [],
+    userSettings: options.userSettings,
   }));
 
   const isRefreshingRef = useRef(false);
@@ -454,6 +457,12 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     ];
   }
 
+  async function handleSettingsChange(settings: UserSettings): Promise<void> {
+    dispatch({ type: "UPDATE_SETTINGS", settings });
+    const settingsFilePath = options.config.stateFilePath.replace("state.json", "settings.json");
+    await saveSettings(settingsFilePath, settings).catch(() => undefined);
+  }
+
   function closeOverlay(): void {
     dispatch({ type: "SET_OVERLAY", overlay: null });
   }
@@ -785,6 +794,9 @@ function Dashboard({ options }: { options: DashboardOptions }) {
             onScopeSelect={handleScopeSelect}
             onCustomUser={handleCustomUser}
             onCancel={closeOverlay}
+            userSettings={state.userSettings}
+            onSettingsChange={handleSettingsChange}
+            onSettingsClose={closeOverlay}
           />
         </Box>
       ) : (

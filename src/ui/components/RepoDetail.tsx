@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { AppState, RepoSummary } from "../types.js";
 import type { AlertSeverity } from "../../types.js";
-import { clampScroll, formatCiStatus, formatTimestamp, pad } from "../helpers.js";
+import { clampScroll, formatCiStatus, pad } from "../helpers.js";
 import { useTerminalSize } from "../useTerminalSize.js";
 
 function severityColor(s: AlertSeverity): string {

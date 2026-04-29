@@ -7,6 +7,7 @@ import { buildNotifications } from "../domain.js";
 import { clearFetchCache, extractOrgFromScope, fetchAccessibleRepos, fetchDependabotAlerts, fetchMyPrsData, fetchNeedsMyReviewData, fetchNotifications, fetchPullRequestDetail, fetchPullRequestDiff, fetchPullRequestsAuthoredBy, fetchRepoPullRequests, markNotificationRead, markAllNotificationsRead, } from "../github.js";
 import { sendNotifications } from "../notify.js";
 import { markSeen, saveState, updateWatchedAuthors } from "../state.js";
+import { saveSettings } from "../settings.js";
 import { PR_VIEWS, COMMON_WATCHED_AUTHORS, clampScroll, formatTimestamp, groupByRepo, parseDiff, sortSecurityAlerts } from "./helpers.js";
 import { reducer } from "./reducer.js";
 import { Footer } from "./components/Footer.js";
@@ -58,6 +59,7 @@ function Dashboard({ options }) {
         repoDetailPrs: [],
         repoDetailPrsLoading: false,
         accessibleRepos: [],
+        userSettings: options.userSettings,
     }));
     const isRefreshingRef = useRef(false);
     const isLoadingMoreRef = useRef(false);
@@ -446,6 +448,11 @@ function Dashboard({ options }) {
             { label: "Custom...", value: null, custom: true },
         ];
     }
+    async function handleSettingsChange(settings) {
+        dispatch({ type: "UPDATE_SETTINGS", settings });
+        const settingsFilePath = options.config.stateFilePath.replace("state.json", "settings.json");
+        await saveSettings(settingsFilePath, settings).catch(() => undefined);
+    }
     function closeOverlay() {
         dispatch({ type: "SET_OVERLAY", overlay: null });
     }
@@ -779,7 +786,7 @@ function Dashboard({ options }) {
         }
     });
     const showOverlay = state.activeOverlay !== null;
-    return (_jsxs(Box, { flexDirection: "column", height: termRows, children: [_jsx(Header, { state: state }), showOverlay ? (_jsx(Box, { flexGrow: 1, flexDirection: "column", paddingX: 2, paddingY: 1, children: _jsx(Overlays, { state: state, authorOptions: buildAuthorOptions(), scopeOptions: buildScopeOptions(), onAuthorSelect: handleAuthorSelect, onScopeSelect: handleScopeSelect, onCustomUser: handleCustomUser, onCancel: closeOverlay }) })) : (_jsxs(Box, { flexDirection: "row", flexGrow: 1, children: [state.mode === "pr" && _jsx(PrList, { state: state, narrow: state.detailOpen }), state.mode === "security" && _jsx(SecurityList, { state: state, hasOrgs: options.organizations.length > 0 }), state.mode === "messages" && _jsx(MessagesList, { state: state }), state.mode === "repos" && !state.repoDetailRepo && _jsx(RepoList, { state: state, repos: repos }), state.mode === "repos" && state.repoDetailRepo && (() => {
+    return (_jsxs(Box, { flexDirection: "column", height: termRows, children: [_jsx(Header, { state: state }), showOverlay ? (_jsx(Box, { flexGrow: 1, flexDirection: "column", paddingX: 2, paddingY: 1, children: _jsx(Overlays, { state: state, authorOptions: buildAuthorOptions(), scopeOptions: buildScopeOptions(), onAuthorSelect: handleAuthorSelect, onScopeSelect: handleScopeSelect, onCustomUser: handleCustomUser, onCancel: closeOverlay, userSettings: state.userSettings, onSettingsChange: handleSettingsChange, onSettingsClose: closeOverlay }) })) : (_jsxs(Box, { flexDirection: "row", flexGrow: 1, children: [state.mode === "pr" && _jsx(PrList, { state: state, narrow: state.detailOpen }), state.mode === "security" && _jsx(SecurityList, { state: state, hasOrgs: options.organizations.length > 0 }), state.mode === "messages" && _jsx(MessagesList, { state: state }), state.mode === "repos" && !state.repoDetailRepo && _jsx(RepoList, { state: state, repos: repos }), state.mode === "repos" && state.repoDetailRepo && (() => {
                         const repo = repos.find(r => r.nameWithOwner === state.repoDetailRepo);
                         return repo ? _jsx(RepoDetail, { state: state, repo: repo }) : null;
                     })(), state.detailOpen && _jsx(PrDetail, { state: state })] })), _jsx(Footer, { state: state })] }));

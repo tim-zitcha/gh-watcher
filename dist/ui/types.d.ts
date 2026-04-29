@@ -1,8 +1,9 @@
 import type { AccessibleRepo } from "../github.js";
 import type { AppConfig, PersistedState, PullRequestDetail, PullRequestSummary, SecurityAlert, SecuritySortMode, TrackedAttentionState } from "../types.js";
+import type { UserSettings } from "../settings.js";
 export type AppMode = "pr" | "security" | "messages" | "repos";
 export type RepoSortMode = "activity" | "alerts" | "name";
-export type ActiveOverlay = "author" | "scope" | "custom" | null;
+export type ActiveOverlay = "author" | "scope" | "custom" | "settings" | null;
 export type ViewKey = "myPrs" | "needsMyReview" | "watchedAuthor" | "security" | "messages" | "repos";
 export interface RepoSummary {
     nameWithOwner: string;
@@ -21,6 +22,7 @@ export interface WatchedAuthorOption {
 }
 export interface DashboardOptions {
     config: AppConfig;
+    userSettings: UserSettings;
     organizations: string[];
     initialState: PersistedState;
     initialAttentionState: TrackedAttentionState;
@@ -61,6 +63,7 @@ export interface AppState {
     repoDetailPrs: PullRequestSummary[];
     repoDetailPrsLoading: boolean;
     accessibleRepos: AccessibleRepo[];
+    userSettings: UserSettings;
 }
 export type Action = {
     type: "SET_MODE";
@@ -177,4 +180,7 @@ export type Action = {
 } | {
     type: "SET_ACCESSIBLE_REPOS";
     repos: AccessibleRepo[];
+} | {
+    type: "UPDATE_SETTINGS";
+    settings: UserSettings;
 };

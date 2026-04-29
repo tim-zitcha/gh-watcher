@@ -1,4 +1,5 @@
 import type { AppState, WatchedAuthorOption } from "../types.js";
+import type { UserSettings } from "../../settings.js";
 export declare function AuthorPicker({ options, onSelect, onCancel }: {
     options: WatchedAuthorOption[];
     onSelect: (opt: WatchedAuthorOption) => void;
@@ -17,7 +18,7 @@ export declare function CustomUserInput({ initial, onSubmit, onCancel }: {
     onSubmit: (value: string) => void;
     onCancel: () => void;
 }): import("react/jsx-runtime").JSX.Element;
-export declare function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, onScopeSelect, onCustomUser, onCancel }: {
+export declare function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, onScopeSelect, onCustomUser, onCancel, userSettings, onSettingsChange, onSettingsClose }: {
     state: AppState;
     authorOptions: WatchedAuthorOption[];
     scopeOptions: Array<{
@@ -28,4 +29,7 @@ export declare function Overlays({ state, authorOptions, scopeOptions, onAuthorS
     onScopeSelect: (value: string | null) => void;
     onCustomUser: (value: string) => void;
     onCancel: () => void;
+    userSettings: UserSettings;
+    onSettingsChange: (settings: UserSettings) => void;
+    onSettingsClose: () => void;
 }): import("react/jsx-runtime").JSX.Element;
