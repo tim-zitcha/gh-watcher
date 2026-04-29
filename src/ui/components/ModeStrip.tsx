@@ -55,7 +55,7 @@ export function ModeStrip({ state }: { state: AppState }) {
               <Text dimColor={!active}>]</Text>
               {" "}{MODE_LABELS[m]}
             </Text>
-            {"  "}
+            <Text>{"  "}</Text>
             {badge(m)}
           </React.Fragment>
         );
