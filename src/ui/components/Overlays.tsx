@@ -3,6 +3,8 @@ import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
 import type { AppState, WatchedAuthorOption } from "../types.js";
+import { SettingsOverlay } from "./SettingsOverlay.js";
+import type { UserSettings } from "../../settings.js";
 
 export function AuthorPicker({ options, onSelect, onCancel }: {
   options: WatchedAuthorOption[];
@@ -49,7 +51,7 @@ export function CustomUserInput({ initial, onSubmit, onCancel }: {
   );
 }
 
-export function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, onScopeSelect, onCustomUser, onCancel }: {
+export function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, onScopeSelect, onCustomUser, onCancel, userSettings, onSettingsChange, onSettingsClose }: {
   state: AppState;
   authorOptions: WatchedAuthorOption[];
   scopeOptions: Array<{ label: string; value: string | null }>;
@@ -57,6 +59,9 @@ export function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, o
   onScopeSelect: (value: string | null) => void;
   onCustomUser: (value: string) => void;
   onCancel: () => void;
+  userSettings: UserSettings;
+  onSettingsChange: (settings: UserSettings) => void;
+  onSettingsClose: () => void;
 }) {
   return (
     <>
@@ -71,6 +76,13 @@ export function Overlays({ state, authorOptions, scopeOptions, onAuthorSelect, o
           initial={state.attentionState.watchedAuthor ?? state.attentionState.viewerLogin}
           onSubmit={onCustomUser}
           onCancel={onCancel}
+        />
+      )}
+      {state.activeOverlay === "settings" && (
+        <SettingsOverlay
+          settings={userSettings}
+          onChange={onSettingsChange}
+          onClose={onSettingsClose}
         />
       )}
     </>
