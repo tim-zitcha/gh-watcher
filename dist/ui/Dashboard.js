@@ -1,4 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { dirname, join } from "node:path";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Box, render, useApp, useInput } from "ink";
 import { useTerminalSize } from "./useTerminalSize.js";
@@ -65,6 +66,9 @@ function Dashboard({ options }) {
     const isLoadingMoreRef = useRef(false);
     const detailPrRef = useRef(null);
     const previousAttentionRef = useRef(options.initialAttentionState);
+    const userSettingsRef = useRef(options.userSettings);
+    const lastRefreshedAt = useRef({});
+    const isInitialSettingsRender = useRef(true);
     // Live-value refs read inside doRefresh so the timer-driven callback never
     // becomes stale. Updated every render by the effect below.
     const attentionStateRef = useRef(state.attentionState);
@@ -83,6 +87,7 @@ function Dashboard({ options }) {
         currentPrViewIndexRef.current = state.currentPrViewIndex;
         modeRef.current = state.mode;
         includeDraftsOverrideRef.current = state.includeDraftsOverride;
+        userSettingsRef.current = state.userSettings;
     });
     const doRefresh = useCallback(async (target) => {
         if (isRefreshingRef.current) {
@@ -102,7 +107,7 @@ function Dashboard({ options }) {
         const watchedAuthor = current.watchedAuthor;
         try {
             let next = { ...current };
-            if (target === "myPrs" || target === "all") {
+            if (target === "myPrs" || (target === "all" && userSettingsRef.current.sources.pr.enabled)) {
                 const data = await fetchMyPrsData({
                     viewerLogin,
                     includeDrafts: effectiveIncludeDrafts,
@@ -118,7 +123,7 @@ function Dashboard({ options }) {
                     readyToMerge: data.readyToMerge,
                 };
             }
-            if (target === "needsMyReview" || target === "all") {
+            if (target === "needsMyReview" || (target === "all" && userSettingsRef.current.sources.pr.enabled)) {
                 const data = await fetchNeedsMyReviewData({
                     viewerLogin,
                     includeDrafts: effectiveIncludeDrafts,
@@ -152,7 +157,7 @@ function Dashboard({ options }) {
                     watchedAuthorTotalCount: data.totalCount,
                 };
             }
-            if (target === "security" || target === "all") {
+            if (target === "security" || (target === "all" && userSettingsRef.current.sources.security.enabled)) {
                 // Prefer the explicitly-scoped org; otherwise query all known orgs in parallel
                 const scopedOrg = extractOrgFromScope(repositoryScope);
                 const orgsToQuery = scopedOrg ? [scopedOrg] : options.organizations;
@@ -163,7 +168,7 @@ function Dashboard({ options }) {
                     next = { ...next, securityAlerts: alerts, securityAlertTotal: total };
                 }
             }
-            if (target === "messages" || target === "all") {
+            if (target === "messages" || (target === "all" && userSettingsRef.current.sources.messages.enabled)) {
                 try {
                     const notifications = await fetchNotifications();
                     const unreadCount = notifications.filter(n => n.unread).length;
@@ -173,7 +178,7 @@ function Dashboard({ options }) {
                     // notifications fetch failure is non-fatal
                 }
             }
-            if (target === "repos" || target === "all") {
+            if (target === "repos" || (target === "all" && userSettingsRef.current.sources.repos.enabled)) {
                 try {
                     const repos = await fetchAccessibleRepos(options.organizations, repositoryScope);
                     // Dispatch separately so this never gets wiped by stale UPDATE_ATTENTION_STATE calls
@@ -206,7 +211,7 @@ function Dashboard({ options }) {
             if (refreshGenerationRef.current !== generation)
                 return;
             dispatch({ type: "UPDATE_ATTENTION_STATE", state: next, itemCount });
-            if (cfg.notificationsEnabled) {
+            if (userSettingsRef.current.notifications.enabled) {
                 const events = buildNotifications(previousAttentionRef.current, next, persistedStateRef.current);
                 if (events.length > 0)
                     void sendNotifications(events);
@@ -258,9 +263,47 @@ function Dashboard({ options }) {
         void doRefresh(initialTarget).then(() => void doRefresh("all"));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    // Poll timer
+    // Persist settings whenever they change, but skip the initial mount
+    // (initial state may include session-only CLI overrides that must not be written to disk)
     useEffect(() => {
-        const id = setInterval(() => void doRefresh("all"), options.config.refreshMinutes * 60 * 1000);
+        if (isInitialSettingsRender.current) {
+            isInitialSettingsRender.current = false;
+            return;
+        }
+        const settingsPath = join(dirname(options.config.stateFilePath), "settings.json");
+        void saveSettings(settingsPath, state.userSettings);
+    }, [state.userSettings, options.config.stateFilePath]);
+    // If active mode is disabled in settings, switch to first enabled mode
+    useEffect(() => {
+        const modes = ["pr", "security", "messages", "repos"];
+        if (!state.userSettings.sources[state.mode].enabled) {
+            const first = modes.find(m => state.userSettings.sources[m].enabled);
+            if (first)
+                dispatch({ type: "SET_MODE", mode: first });
+        }
+    }, [state.userSettings, state.mode]);
+    // Per-source polling heartbeat — ticks every minute, each source fires on its own cadence
+    useEffect(() => {
+        const REFRESH_FOR_MODE = {
+            pr: "all",
+            security: "security",
+            messages: "messages",
+            repos: "repos",
+        };
+        const id = setInterval(() => {
+            const settings = userSettingsRef.current;
+            const modes = ["pr", "security", "messages", "repos"];
+            for (const mode of modes) {
+                const src = settings.sources[mode];
+                if (!src.enabled)
+                    continue;
+                const last = lastRefreshedAt.current[mode] ?? 0;
+                if (Date.now() - last >= src.pollMinutes * 60_000) {
+                    lastRefreshedAt.current[mode] = Date.now();
+                    void doRefresh(REFRESH_FOR_MODE[mode]);
+                }
+            }
+        }, 60_000);
         return () => clearInterval(id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -448,10 +491,8 @@ function Dashboard({ options }) {
             { label: "Custom...", value: null, custom: true },
         ];
     }
-    async function handleSettingsChange(settings) {
+    function handleSettingsChange(settings) {
         dispatch({ type: "UPDATE_SETTINGS", settings });
-        const settingsFilePath = options.config.stateFilePath.replace("state.json", "settings.json");
-        await saveSettings(settingsFilePath, settings).catch(() => undefined);
     }
     function closeOverlay() {
         dispatch({ type: "SET_OVERLAY", overlay: null });
@@ -608,12 +649,10 @@ function Dashboard({ options }) {
                     : state.attentionState.notifications.filter(n => n.unread);
                 const n = items[state.selectedRowIndex];
                 if (n?.subject.url) {
-                    // Convert GitHub API URL to web URL.
-                    // API:  https://api.github.com/repos/owner/repo/pulls/123
-                    // Web:  https://github.com/owner/repo/pull/123
                     const webUrl = n.subject.url
                         .replace("https://api.github.com/repos/", "https://github.com/")
-                        .replace(/\/pulls\/(\d+)$/, "/pull/$1");
+                        .replace(/\/pulls\/(\d+)$/, "/pull/$1")
+                        .replace(/\/commits\/([0-9a-f]+)$/, "/commit/$1");
                     void open(webUrl);
                 }
                 return;
@@ -653,19 +692,21 @@ function Dashboard({ options }) {
             }
             return;
         }
-        if (input === "1") {
-            dispatch({ type: "SET_MODE", mode: "pr" });
-            return;
+        // Numeric keys switch to the Nth enabled mode
+        {
+            const enabledModes = ["pr", "security", "messages", "repos"]
+                .filter(m => state.userSettings.sources[m].enabled);
+            const numIdx = ["1", "2", "3", "4"].indexOf(input);
+            if (numIdx >= 0 && numIdx < enabledModes.length) {
+                const targetMode = enabledModes[numIdx];
+                dispatch({ type: "SET_MODE", mode: targetMode });
+                if (targetMode === "repos" && state.accessibleRepos.length === 0 && !state.isRefreshing) {
+                    void doRefresh("repos");
+                }
+                return;
+            }
         }
-        if (input === "2") {
-            dispatch({ type: "SET_MODE", mode: "security" });
-            return;
-        }
-        if (input === "3") {
-            dispatch({ type: "SET_MODE", mode: "messages" });
-            return;
-        }
-        if (input === "4" || input === "p") {
+        if (input === "p") {
             dispatch({ type: "SET_MODE", mode: "repos" });
             if (state.accessibleRepos.length === 0 && !state.isRefreshing) {
                 void doRefresh("repos");
@@ -778,6 +819,10 @@ function Dashboard({ options }) {
             const files = parseDiff(state.detailDiff);
             const next = Math.min(files.length - 1, state.detailDiffFileIndex + 1);
             dispatch({ type: "SET_DIFF_FILE_INDEX", index: next });
+            return;
+        }
+        if (input === ",") {
+            dispatch({ type: "SET_OVERLAY", overlay: state.activeOverlay === "settings" ? null : "settings" });
             return;
         }
         if (input === "q" || (key.ctrl && input === "c")) {

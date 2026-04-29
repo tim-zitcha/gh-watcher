@@ -125,7 +125,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     try {
       let next: TrackedAttentionState = { ...current };
 
-      if (target === "myPrs" || target === "all") {
+      if (target === "myPrs" || (target === "all" && userSettingsRef.current.sources.pr.enabled)) {
         const data = await fetchMyPrsData({
           viewerLogin,
           includeDrafts: effectiveIncludeDrafts,
@@ -141,7 +141,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           readyToMerge: data.readyToMerge,
         };
       }
-      if (target === "needsMyReview" || target === "all") {
+      if (target === "needsMyReview" || (target === "all" && userSettingsRef.current.sources.pr.enabled)) {
         const data = await fetchNeedsMyReviewData({
           viewerLogin,
           includeDrafts: effectiveIncludeDrafts,
@@ -175,7 +175,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           watchedAuthorTotalCount: data.totalCount,
         };
       }
-      if (target === "security" || target === "all") {
+      if (target === "security" || (target === "all" && userSettingsRef.current.sources.security.enabled)) {
         // Prefer the explicitly-scoped org; otherwise query all known orgs in parallel
         const scopedOrg = extractOrgFromScope(repositoryScope);
         const orgsToQuery = scopedOrg ? [scopedOrg] : options.organizations;
@@ -187,7 +187,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
         }
       }
 
-      if (target === "messages" || target === "all") {
+      if (target === "messages" || (target === "all" && userSettingsRef.current.sources.messages.enabled)) {
         try {
           const notifications = await fetchNotifications();
           const unreadCount = notifications.filter(n => n.unread).length;
@@ -197,7 +197,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
         }
       }
 
-      if (target === "repos" || target === "all") {
+      if (target === "repos" || (target === "all" && userSettingsRef.current.sources.repos.enabled)) {
         try {
           const repos = await fetchAccessibleRepos(options.organizations, repositoryScope);
           // Dispatch separately so this never gets wiped by stale UPDATE_ATTENTION_STATE calls
@@ -659,12 +659,10 @@ function Dashboard({ options }: { options: DashboardOptions }) {
           : state.attentionState.notifications.filter(n => n.unread);
         const n = items[state.selectedRowIndex];
         if (n?.subject.url) {
-          // Convert GitHub API URL to web URL.
-          // API:  https://api.github.com/repos/owner/repo/pulls/123
-          // Web:  https://github.com/owner/repo/pull/123
           const webUrl = n.subject.url
             .replace("https://api.github.com/repos/", "https://github.com/")
-            .replace(/\/pulls\/(\d+)$/, "/pull/$1");
+            .replace(/\/pulls\/(\d+)$/, "/pull/$1")
+            .replace(/\/commits\/([0-9a-f]+)$/, "/commit/$1");
           void open(webUrl);
         }
         return;
