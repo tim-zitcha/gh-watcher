@@ -13,6 +13,7 @@ export function Footer({ state }: { state: AppState }) {
         <Text dimColor>m mark read  M mark all read</Text>{sep}
         <Text dimColor>a all/unread</Text>{sep}
         <Text dimColor>1/2/3/4 mode</Text>{sep}
+        <Text dimColor>, settings</Text>{sep}
         <Text dimColor>r refresh  q quit</Text>
       </Box>
     );
@@ -26,6 +27,7 @@ export function Footer({ state }: { state: AppState }) {
         <Text dimColor>s sort severity/age</Text>{sep}
         <Text dimColor>o org scope</Text>{sep}
         <Text dimColor>1/2/3/4 mode</Text>{sep}
+        <Text dimColor>, settings</Text>{sep}
         <Text dimColor>r refresh  q quit</Text>
       </Box>
     );
@@ -39,6 +41,7 @@ export function Footer({ state }: { state: AppState }) {
           <Text dimColor>Enter open PR</Text>{sep}
           <Text dimColor>Esc back to list</Text>{sep}
           <Text dimColor>1/2/3/4 mode</Text>{sep}
+          <Text dimColor>, settings</Text>{sep}
           <Text dimColor>r refresh  q quit</Text>
         </Box>
       );
@@ -49,6 +52,7 @@ export function Footer({ state }: { state: AppState }) {
         <Text dimColor>Enter open repo</Text>{sep}
         <Text dimColor>s sort activity/alerts/name</Text>{sep}
         <Text dimColor>1/2/3/4 mode</Text>{sep}
+        <Text dimColor>, settings</Text>{sep}
         <Text dimColor>r refresh  q quit</Text>
       </Box>
     );
@@ -62,6 +66,7 @@ export function Footer({ state }: { state: AppState }) {
         <Text dimColor>{"↑↓"} scroll detail</Text>{sep}
         <Text dimColor>d diff  {"< >"} file</Text>{sep}
         <Text dimColor>o open in browser</Text>{sep}
+        <Text dimColor>, settings</Text>{sep}
         <Text dimColor>Esc close  q quit</Text>
       </Box>
     );
@@ -74,6 +79,7 @@ export function Footer({ state }: { state: AppState }) {
       <Text dimColor>m mark seen  M mark all</Text>{sep}
       <Text dimColor>Tab sub-view</Text>{sep}
       <Text dimColor>1/2/3/4 mode</Text>{sep}
+      <Text dimColor>, settings</Text>{sep}
       <Text dimColor>{"/ author  o scope  r refresh  q quit"}</Text>
     </Box>
   );
