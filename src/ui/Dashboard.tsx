@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import React, { useCallback, useEffect, useReducer, useRef } from "react";
 import { Box, render, useApp, useInput } from "ink";
 import { useTerminalSize } from "./useTerminalSize.js";
@@ -77,6 +78,8 @@ function Dashboard({ options }: { options: DashboardOptions }) {
   const isLoadingMoreRef = useRef(false);
   const detailPrRef = useRef<PullRequestSummary | null>(null);
   const previousAttentionRef = useRef<TrackedAttentionState>(options.initialAttentionState);
+  const userSettingsRef = useRef<UserSettings>(options.userSettings);
+  const lastRefreshedAt = useRef<Partial<Record<AppMode, number>>>({});
 
   // Live-value refs read inside doRefresh so the timer-driven callback never
   // becomes stale. Updated every render by the effect below.
@@ -97,6 +100,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     currentPrViewIndexRef.current = state.currentPrViewIndex;
     modeRef.current = state.mode;
     includeDraftsOverrideRef.current = state.includeDraftsOverride;
+    userSettingsRef.current = state.userSettings;
   });
 
   const doRefresh = useCallback(async (target: ViewKey | "all"): Promise<void> => {
@@ -229,7 +233,7 @@ function Dashboard({ options }: { options: DashboardOptions }) {
 
       dispatch({ type: "UPDATE_ATTENTION_STATE", state: next, itemCount });
 
-      if (cfg.notificationsEnabled) {
+      if (userSettingsRef.current.notifications.enabled) {
         const events = buildNotifications(previousAttentionRef.current, next, persistedStateRef.current);
         if (events.length > 0) void sendNotifications(events);
       }
@@ -280,9 +284,42 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll timer
+  // Persist settings whenever they change
   useEffect(() => {
-    const id = setInterval(() => void doRefresh("all"), options.config.refreshMinutes * 60 * 1000);
+    const settingsPath = join(dirname(options.config.stateFilePath), "settings.json");
+    void saveSettings(settingsPath, state.userSettings);
+  }, [state.userSettings, options.config.stateFilePath]);
+
+  // If active mode is disabled in settings, switch to first enabled mode
+  useEffect(() => {
+    const modes: AppMode[] = ["pr", "security", "messages", "repos"];
+    if (!state.userSettings.sources[state.mode].enabled) {
+      const first = modes.find(m => state.userSettings.sources[m].enabled);
+      if (first) dispatch({ type: "SET_MODE", mode: first });
+    }
+  }, [state.userSettings, state.mode]);
+
+  // Per-source polling heartbeat — ticks every minute, each source fires on its own cadence
+  useEffect(() => {
+    const REFRESH_FOR_MODE: Record<AppMode, ViewKey | "all"> = {
+      pr: "all",
+      security: "security",
+      messages: "messages",
+      repos: "repos",
+    };
+    const id = setInterval(() => {
+      const settings = userSettingsRef.current;
+      const modes: AppMode[] = ["pr", "security", "messages", "repos"];
+      for (const mode of modes) {
+        const src = settings.sources[mode];
+        if (!src.enabled) continue;
+        const last = lastRefreshedAt.current[mode] ?? 0;
+        if (Date.now() - last >= src.pollMinutes * 60_000) {
+          lastRefreshedAt.current[mode] = Date.now();
+          void doRefresh(REFRESH_FOR_MODE[mode]);
+        }
+      }
+    }, 60_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -457,10 +494,8 @@ function Dashboard({ options }: { options: DashboardOptions }) {
     ];
   }
 
-  async function handleSettingsChange(settings: UserSettings): Promise<void> {
+  function handleSettingsChange(settings: UserSettings): void {
     dispatch({ type: "UPDATE_SETTINGS", settings });
-    const settingsFilePath = options.config.stateFilePath.replace("state.json", "settings.json");
-    await saveSettings(settingsFilePath, settings).catch(() => undefined);
   }
 
   function closeOverlay(): void {
@@ -774,6 +809,10 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       const files = parseDiff(state.detailDiff);
       const next = Math.min(files.length - 1, state.detailDiffFileIndex + 1);
       dispatch({ type: "SET_DIFF_FILE_INDEX", index: next });
+      return;
+    }
+    if (input === ",") {
+      dispatch({ type: "SET_OVERLAY", overlay: state.activeOverlay === "settings" ? null : "settings" });
       return;
     }
     if (input === "q" || (key.ctrl && input === "c")) { exit(); return; }
