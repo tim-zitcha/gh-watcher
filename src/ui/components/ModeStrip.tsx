@@ -1,69 +1,65 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { AppState } from "../types.js";
+import type { AppMode, AppState } from "../types.js";
+
+const MODE_LABELS: Record<AppMode, string> = {
+  pr: "Pull Requests",
+  security: "Security",
+  messages: "Messages",
+  repos: "Repos",
+};
+
+const ALL_MODES: AppMode[] = ["pr", "security", "messages", "repos"];
 
 export function ModeStrip({ state }: { state: AppState }) {
-  const { mode, attentionState } = state;
+  const { mode, attentionState, userSettings } = state;
+  const enabledModes = ALL_MODES.filter(m => userSettings.sources[m].enabled);
+
   const prCount = attentionState.myPullRequests.length + attentionState.needsMyReview.length;
   const secAlerts = attentionState.securityAlerts;
   const critCount = secAlerts.filter(a => a.severity === "critical").length;
   const highCount = secAlerts.filter(a => a.severity === "high").length;
   const unreadCount = attentionState.notificationUnreadCount;
 
-  const prActive = mode === "pr";
-  const secActive = mode === "security";
-  const msgActive = mode === "messages";
-  const repoActive = mode === "repos";
-  const borderColor = secActive ? "red" : msgActive ? "blue" : repoActive ? "green" : "cyan";
+  const borderColor = mode === "security" ? "red"
+    : mode === "messages" ? "blue"
+    : mode === "repos" ? "green"
+    : "cyan";
 
-  return (
-    <Box borderStyle="single" borderColor={borderColor} paddingX={1}>
-      <Text bold={prActive} color={prActive ? "cyan" : "gray"}>
-        <Text dimColor={!prActive}>[</Text>
-        <Text color={prActive ? "cyan" : "gray"}>1</Text>
-        <Text dimColor={!prActive}>]</Text>
-        {" "}Pull Requests
-      </Text>
-      <Text color={prActive ? "cyan" : "gray"}>{"  "}({prCount})</Text>
-
-      <Text>{"   "}</Text>
-
-      <Text bold={secActive} color={secActive ? "red" : "gray"}>
-        <Text dimColor={!secActive}>[</Text>
-        <Text color={secActive ? "red" : "gray"}>2</Text>
-        <Text dimColor={!secActive}>]</Text>
-        {" "}Security
-      </Text>
-      <Text>{"  "}</Text>
-      {critCount > 0
+  function badge(m: AppMode): React.ReactNode {
+    if (m === "pr") return prCount > 0 ? <Text color="cyan">({prCount})</Text> : <Text dimColor>(0)</Text>;
+    if (m === "security") {
+      return critCount > 0
         ? <Text color="red">({critCount} crit{highCount > 0 ? ` · ${highCount} high` : ""})</Text>
         : highCount > 0
         ? <Text color="magenta">({highCount} high)</Text>
-        : <Text dimColor>(0)</Text>
-      }
+        : <Text dimColor>(0)</Text>;
+    }
+    if (m === "messages") return unreadCount > 0 ? <Text color="blue">({unreadCount} unread)</Text> : <Text dimColor>(0)</Text>;
+    return null;
+  }
 
-      <Text>{"   "}</Text>
+  const modeColor: Record<AppMode, string> = { pr: "cyan", security: "red", messages: "blue", repos: "green" };
 
-      <Text bold={msgActive} color={msgActive ? "blue" : "gray"}>
-        <Text dimColor={!msgActive}>[</Text>
-        <Text color={msgActive ? "blue" : "gray"}>3</Text>
-        <Text dimColor={!msgActive}>]</Text>
-        {" "}Messages
-      </Text>
-      <Text>{"  "}</Text>
-      {unreadCount > 0
-        ? <Text color="blue">({unreadCount} unread)</Text>
-        : <Text dimColor>(0)</Text>
-      }
-
-      <Text>{"   "}</Text>
-
-      <Text bold={repoActive} color={repoActive ? "green" : "gray"}>
-        <Text dimColor={!repoActive}>[</Text>
-        <Text color={repoActive ? "green" : "gray"}>4</Text>
-        <Text dimColor={!repoActive}>]</Text>
-        {" "}Repos
-      </Text>
+  return (
+    <Box borderStyle="single" borderColor={borderColor} paddingX={1}>
+      {enabledModes.map((m, i) => {
+        const active = mode === m;
+        const color = active ? modeColor[m] : "gray";
+        return (
+          <React.Fragment key={m}>
+            {i > 0 && <Text>{"   "}</Text>}
+            <Text bold={active} color={color}>
+              <Text dimColor={!active}>[</Text>
+              <Text color={color}>{i + 1}</Text>
+              <Text dimColor={!active}>]</Text>
+              {" "}{MODE_LABELS[m]}
+            </Text>
+            {"  "}
+            {badge(m)}
+          </React.Fragment>
+        );
+      })}
     </Box>
   );
 }

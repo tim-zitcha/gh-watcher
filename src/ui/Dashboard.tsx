@@ -692,19 +692,21 @@ function Dashboard({ options }: { options: DashboardOptions }) {
       }
       return;
     }
-    if (input === "1") {
-      dispatch({ type: "SET_MODE", mode: "pr" });
-      return;
+    // Numeric keys switch to the Nth enabled mode
+    {
+      const enabledModes: AppMode[] = (["pr", "security", "messages", "repos"] as AppMode[])
+        .filter(m => state.userSettings.sources[m].enabled);
+      const numIdx = ["1","2","3","4"].indexOf(input);
+      if (numIdx >= 0 && numIdx < enabledModes.length) {
+        const targetMode = enabledModes[numIdx]!;
+        dispatch({ type: "SET_MODE", mode: targetMode });
+        if (targetMode === "repos" && state.accessibleRepos.length === 0 && !state.isRefreshing) {
+          void doRefresh("repos");
+        }
+        return;
+      }
     }
-    if (input === "2") {
-      dispatch({ type: "SET_MODE", mode: "security" });
-      return;
-    }
-    if (input === "3") {
-      dispatch({ type: "SET_MODE", mode: "messages" });
-      return;
-    }
-    if (input === "4" || input === "p") {
+    if (input === "p") {
       dispatch({ type: "SET_MODE", mode: "repos" });
       if (state.accessibleRepos.length === 0 && !state.isRefreshing) {
         void doRefresh("repos");
